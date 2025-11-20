@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Workflow Scheduler - Image Processing Platform</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="header-content">
+                <h1>🔬 Branch-Aware Workflow Scheduler</h1>
+                <p class="subtitle">Process large medical images with intelligent task scheduling</p>
+            </div>
+            <div class="user-info">
+                <div class="info-box">
+                    <label for="userId">
+                        <strong>Your User ID:</strong>
+                        <span class="help-icon" title="Each user has isolated workflows. Use different IDs to test multi-tenant isolation.">ℹ️</span>
+                    </label>
+                    <div class="input-group">
+                        <input type="text" id="userId" placeholder="e.g., user-1" value="user-1">
+                        <button type="button" onclick="connectWebSocket()" id="connectBtn">
+                            <span id="wsStatus">🔌</span> Connect
+                        </button>
+                    </div>
+                    <small class="help-text">Connect to receive real-time progress updates</small>
+                </div>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab-btn active" onclick="showTab('create')">➕ Create Workflow</button>
+            <button class="tab-btn" onclick="showTab('workflows')">📋 My Workflows</button>
+            <button class="tab-btn" onclick="showTab('help')">❓ Help & Guide</button>
+        </div>
+
+        <!-- Create Workflow Tab -->
+        <div id="createTab" class="tab-content active">
+            <section class="workflow-section">
+                <div class="section-header">
+                    <h2>Create New Workflow</h2>
+                    <p class="section-description">
+                        A workflow is a collection of image processing jobs. Jobs in the same branch run one after another, 
+                        while jobs in different branches can run in parallel.
+                    </p>
+                </div>
+
+                <form id="workflowForm">
+                    <div class="form-group">
+                        <label for="workflowName">
+                            Workflow Name <span class="required">*</span>
+                            <span class="help-icon" title="Give your workflow a descriptive name">ℹ️</span>
+                        </label>
+                        <input type="text" id="workflowName" required placeholder="e.g., Cell Analysis for Sample 001">
+                    </div>
+                    
+                    <div class="jobs-container">
+                        <div class="jobs-header">
+                            <h3>Jobs in This Workflow</h3>
+                            <button type="button" class="btn-secondary" onclick="addJob()">
+                                ➕ Add Job
+                            </button>
+                        </div>
+                        <p class="help-text">
+                            Each job processes one image. You can add multiple jobs and set dependencies between them.
+                        </p>
+                        <div id="jobsList"></div>
+                        <div id="noJobsMessage" class="empty-state">
+                            <p>No jobs added yet. Click "Add Job" to get started.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="form-actions">
+                        <button type="submit" class="btn-primary" id="submitBtn">
+                            🚀 Submit Workflow
+                        </button>
+                        <button type="button" class="btn-secondary" onclick="resetForm()">
+                            🔄 Reset Form
+                        </button>
+                    </div>
+                </form>
+            </section>
+        </div>
+
+        <!-- My Workflows Tab -->
+        <div id="workflowsTab" class="tab-content">
+            <section class="workflows-section">
+                <div class="section-header">
+                    <h2>My Workflows</h2>
+                    <div class="workflow-controls">
+                        <button type="button" class="btn-secondary" onclick="loadWorkflows()">
+                            🔄 Refresh
+                        </button>
+                        <span class="auto-refresh">
+                            <input type="checkbox" id="autoRefresh" checked>
+                            <label for="autoRefresh">Auto-refresh (2s)</label>
+                        </span>
+                    </div>
+                </div>
+                <div id="workflowsList" class="workflows-grid"></div>
+            </section>
+        </div>
+
+        <!-- Help Tab -->
+        <div id="helpTab" class="tab-content">
+            <section class="help-section">
+                <h2>📖 User Guide</h2>
+                
+                <div class="help-content">
+                    <div class="help-item">
+                        <h3>🎯 What is this platform?</h3>
+                        <p>This platform processes large medical images (Whole Slide Images, WSI) to detect and segment cells. 
+                        You can create workflows with multiple processing jobs that run automatically.</p>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>📝 How to create a workflow:</h3>
+                        <ol>
+                            <li><strong>Enter a workflow name</strong> - Give it a descriptive name</li>
+                            <li><strong>Add jobs</strong> - Click "Add Job" for each image you want to process</li>
+                            <li><strong>Configure each job:</strong>
+                                <ul>
+                                    <li><strong>Job Type:</strong> Choose what to do with the image
+                                        <ul>
+                                            <li><code>Cell Segmentation</code> - Detects and segments all cells in the image</li>
+                                            <li><code>Tissue Mask</code> - Creates a binary mask showing tissue regions</li>
+                                        </ul>
+                                    </li>
+                                    <li><strong>Select Image:</strong> Choose from available test images</li>
+                                    <li><strong>Branch:</strong> Jobs in the same branch run one after another. Use different branch names for parallel processing.</li>
+                                    <li><strong>Depends On:</strong> Optional. List job IDs that must complete first (e.g., "job-1,job-2")</li>
+                                </ul>
+                            </li>
+                            <li><strong>Submit</strong> - Click "Submit Workflow" to start processing</li>
+                        </ol>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>🔄 Understanding Branches:</h3>
+                        <p><strong>Same Branch = Serial Execution:</strong> If two jobs use "branch-1", they run one after another.</p>
+                        <p><strong>Different Branches = Parallel Execution:</strong> Jobs in "branch-1" and "branch-2" can run at the same time.</p>
+                        <p><strong>Example:</strong> If you have 3 jobs in branch-1 and 2 jobs in branch-2, the system will run 2 jobs in parallel (one from each branch) until all are done.</p>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>👥 Multi-Tenant System:</h3>
+                        <p>Each user (identified by User ID) can only see and manage their own workflows. 
+                        At most 3 users can have running jobs at the same time. The 4th user will wait in queue.</p>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>📊 Monitoring Progress:</h3>
+                        <ul>
+                            <li>Workflows auto-refresh every 2 seconds</li>
+                            <li>Connect WebSocket for real-time updates</li>
+                            <li>Progress bars show completion percentage</li>
+                            <li>Click "View Jobs" to see individual task status</li>
+                        </ul>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>🖼️ Available Test Images:</h3>
+                        <ul id="availableImages">
+                            <li>Loading images...</li>
+                        </ul>
+                        <p><small>These are sample Whole Slide Images (WSI) in Aperio SVS format for testing.</small></p>
+                    </div>
+
+                    <div class="help-item">
+                        <h3>❌ Canceling Jobs:</h3>
+                        <p>You can cancel jobs that are still waiting in the queue (status: PENDING). 
+                        Once a job starts running, it cannot be cancelled.</p>
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
