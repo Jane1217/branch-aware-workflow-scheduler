@@ -41,15 +41,22 @@ class StorageService:
         
         return str(output_file)
     
-    async def save_tissue_mask(
+    async def save_tissue_mask_results(
         self,
         job_id: str,
-        mask: Any,
-        format: str = "tiff"
+        results: Dict[str, Any],
+        format: str = "json"
     ) -> str:
-        """Save tissue mask to disk"""
-        output_file = self.result_path / f"{job_id}_mask.{format}"
-        # Save mask image
+        """Save tissue mask results to disk"""
+        output_file = self.result_path / f"{job_id}_tissue_mask.{format}"
+        
+        if format == "json":
+            async with aiofiles.open(output_file, "w") as f:
+                await f.write(json.dumps(results, indent=2))
+        elif format == "tiff":
+            # TODO: Save actual mask image if needed
+            pass
+        
         return str(output_file)
     
     async def load_results(self, job_id: str) -> Optional[Dict[str, Any]]:

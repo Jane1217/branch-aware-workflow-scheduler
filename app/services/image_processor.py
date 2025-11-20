@@ -9,6 +9,7 @@ import asyncio
 from app.config import settings
 from app.models.job import Job, JobType, JobStatus
 from app.services.instanseg_service import InstanSegService
+from app.services.tissue_mask_service import TissueMaskService
 from app.services.storage import StorageService
 from app.utils.wsi_handler import WSIHandler
 from app.utils.tile_processor import TileProcessor
@@ -29,6 +30,7 @@ class ImageProcessor:
             overlap=settings.TILE_OVERLAP
         )
         self.instanseg_service = InstanSegService()
+        self.tissue_mask_service = TissueMaskService()
         self.storage_service = StorageService()
     
     async def process_job(self, job: Job, progress_callback=None):
@@ -80,13 +82,41 @@ class ImageProcessor:
             raise
     
     async def _process_tissue_mask(self, job: Job, progress_callback=None):
-        """Process tissue mask generation job"""
-        # Placeholder for tissue mask processing
-        # This can be implemented similarly with tiled processing
+        """
+        Process tissue mask generation job using optimized tiled processing.
+        
+        Uses the same acceleration architecture as cell segmentation:
+        - Tiled processing for large WSIs
+        - Parallel tile processing within a job
+        - Progress tracking and result aggregation
+        """
         try:
-            # TODO: Implement tissue mask generation
-            job.status = JobStatus.FAILED
-            job.error_message = "Tissue mask generation not yet implemented"
+            # Create progress callback wrapper
+            async def progress_wrapper(progress: float, tiles_processed: int, tiles_total: int):
+                if progress_callback:
+                    await progress_callback(progress, tiles_processed, tiles_total)
+            
+            # Generate tissue mask with optimized parallel tile processing
+            results = await self.tissue_mask_service.generate_tissue_mask(
+                job.image_path,
+                progress_callback=progress_wrapper
+            )
+            
+            # Save results
+            result_path = await self.storage_service.save_tissue_mask_results(
+                job.job_id,
+                results,
+                format="json"
+            )
+            
+            job.result_path = result_path
+            job.metadata.update({
+                "total_regions": results.get("total_regions", 0),
+                "tissue_percentage": results.get("tissue_percentage", 0),
+                "tiles_processed": results.get("tiles_processed", 0),
+                "method": results.get("method", "unknown")
+            })
+            
         except Exception as e:
             job.status = JobStatus.FAILED
             job.error_message = str(e)

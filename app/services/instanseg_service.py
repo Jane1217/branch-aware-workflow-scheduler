@@ -75,9 +75,12 @@ class InstanSegService:
         Returns segmentation results with polygon coordinates.
         
         This method implements the acceleration strategy:
-        - Tiled processing for large WSIs
+        - Tiled processing for large WSIs (direct, no eval() attempt)
         - Parallel tile processing within a job
         - Progress tracking and result merging
+        
+        For WSI files (.svs, .tif, etc.), we directly use tiled processing
+        to avoid memory issues and timeouts from eval().
         """
         if self.model is None:
             raise RuntimeError("InstanSeg model not loaded")
@@ -86,10 +89,16 @@ class InstanSegService:
         if not image_path.exists():
             raise FileNotFoundError(f"Image not found: {image_path}")
         
-        # Try direct evaluation first (InstanSeg has limited WSI support)
+        # WSI file extensions that require tiled processing
+        wsi_extensions = {'.svs', '.tif', '.tiff', '.ndpi', '.vms', '.vmu', '.scn', '.mrxs', '.zvi'}
+        
+        # For WSI files, directly use tiled processing (more reliable and efficient)
+        if image_path.suffix.lower() in wsi_extensions:
+            return await self._segment_cells_tiled(image_path, progress_callback)
+        
+        # For small images, try direct evaluation first
+        # This is only for non-WSI formats that might be small enough
         try:
-            # Run InstanSeg evaluation
-            # This will handle WSI if supported, otherwise we'll fall back to tiled processing
             result = self.model.eval(
                 image=str(image_path),
                 save_output=False,
@@ -100,7 +109,6 @@ class InstanSegService:
             if isinstance(result, dict):
                 labeled_output = result.get('labeled', result.get('output', result))
             elif hasattr(result, 'numpy'):
-                # If it's a tensor, convert to numpy
                 labeled_output = result.cpu().numpy() if hasattr(result, 'cpu') else np.array(result)
             else:
                 labeled_output = result
