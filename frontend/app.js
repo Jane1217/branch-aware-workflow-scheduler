@@ -132,11 +132,10 @@ function startAutoRefresh() {
     }, 100);
     
     // Re-adjust interval if WebSocket connection status changes
-    const checkInterval = setInterval(() => {
-        const newInterval = (wsConnection && wsConnection.readyState === WebSocket.OPEN) ? 3000 : 2000;
+    setInterval(() => {
         if (autoRefreshInterval) {
             stopAutoRefresh();
-            startAutoRefresh(); // Restart with new interval
+            startAutoRefresh(); // Restart with new interval based on WebSocket status
         }
     }, 8000); // Check every 8 seconds
 }
