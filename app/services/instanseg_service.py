@@ -171,13 +171,21 @@ class InstanSegService:
             ]
             
             # Wait for all tiles in batch to complete
-            batch_results = await asyncio.gather(*batch_tasks)
+            # Use return_exceptions=True to handle individual tile failures gracefully
+            batch_results = await asyncio.gather(*batch_tasks, return_exceptions=True)
             
             # Flatten results (each tile may return multiple cells)
-            for tile_cells in batch_results:
-                all_cells.extend(tile_cells)
+            # Skip exceptions (they're already logged)
+            for result in batch_results:
+                if isinstance(result, Exception):
+                    print(f"Tile processing exception: {result}")
+                    continue
+                all_cells.extend(result)
             
             processed_tiles += len(batch_tiles)
+            
+            # Clear GPU cache after each batch to prevent memory accumulation
+            self._clear_gpu_cache()
             
             # Update progress
             if progress_callback:
@@ -224,6 +232,8 @@ class InstanSegService:
         """
         Process a single tile synchronously (called from executor).
         This is the actual InstanSeg inference on a tile.
+        
+        Includes GPU memory management for MPS backend.
         """
         try:
             # Extract tile from WSI
@@ -244,10 +254,45 @@ class InstanSegService:
             
             # Convert to polygons and adjust coordinates
             tile_cells = self._tile_segments_to_cells(labeled_output, tile)
+            
+            # Clear GPU cache after processing each tile (important for MPS)
+            self._clear_gpu_cache()
+            
             return tile_cells
+        except RuntimeError as e:
+            if "out of memory" in str(e).lower() or "MPS" in str(e):
+                print(f"MPS memory error on tile {tile}, clearing cache and retrying...")
+                self._clear_gpu_cache()
+                # Retry once after clearing cache
+                try:
+                    result = self.model.eval_small_image(tile_image, pixel_size=None)
+                    if isinstance(result, tuple):
+                        labeled_output, _ = result
+                    else:
+                        labeled_output = result
+                    tile_cells = self._tile_segments_to_cells(labeled_output, tile)
+                    self._clear_gpu_cache()
+                    return tile_cells
+                except Exception as retry_e:
+                    print(f"Retry failed for tile {tile}: {retry_e}")
+                    return []
+            else:
+                print(f"Error processing tile {tile}: {e}")
+                return []
         except Exception as e:
             print(f"Error processing tile {tile}: {e}")
             return []
+    
+    def _clear_gpu_cache(self):
+        """Clear GPU cache to free memory (especially important for MPS backend)"""
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass  # Ignore errors in cache clearing
     
     def _tile_segments_to_cells(
         self,

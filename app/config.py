@@ -34,11 +34,11 @@ class Settings(BaseSettings):
     # InstanSeg Settings - Optimized for acceleration
     TILE_SIZE: int = 2048  # Tile size in pixels (larger = fewer tiles, faster processing)
     TILE_OVERLAP: int = 128  # Overlap between tiles to avoid seams (pixels)
-    BATCH_SIZE: int = 8  # Number of tiles processed in parallel within a job (Job-level concurrency)
+    BATCH_SIZE: int = 2  # Number of tiles processed in parallel (reduced for MPS memory limits)
     WSI_LEVEL: int = 1  # WSI pyramid level (0=highest res, 1=faster with good quality, 2=fastest)
     
     # Concurrency Settings
-    TILE_PROCESSING_WORKERS: int = 8  # Thread pool size for parallel tile processing within a job
+    TILE_PROCESSING_WORKERS: int = 2  # Thread pool size (reduced for MPS memory limits on macOS)
     
     # WebSocket Settings
     WS_HEARTBEAT_INTERVAL: int = 30
