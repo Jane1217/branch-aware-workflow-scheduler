@@ -21,6 +21,8 @@ from app.api import workflows, jobs, progress
 from app.services.image_processor import ImageProcessor
 from app.models.job import JobType
 from app.middleware.rate_limit import RateLimitMiddleware
+from app.middleware.metrics_middleware import MetricsMiddleware
+from app.utils.metrics import get_metrics, CONTENT_TYPE_LATEST
 
 
 # Global instances (will be initialized in lifespan)
@@ -128,13 +130,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Metrics middleware (must be added before rate limiting)
+app.add_middleware(MetricsMiddleware)
+
 # Rate limiting middleware
-app.add_middleware(RateLimitMiddleware, max_concurrent_requests=100)
+app.add_middleware(RateLimitMiddleware, requests_per_minute=100, burst_capacity=20)
 
 # Include API routers
 app.include_router(workflows.router, prefix="/api/workflows", tags=["workflows"])
 app.include_router(jobs.router, prefix="/api/jobs", tags=["jobs"])
 app.include_router(progress.router, prefix="/api/progress", tags=["progress"])
+
+# Visualization API
+from app.api import visualization
+app.include_router(visualization.router, prefix="/api/visualization", tags=["visualization"])
 
 # Mount static files for frontend
 try:
@@ -184,4 +193,11 @@ async def health():
         "running_jobs": app.state.scheduler.get_running_jobs_count(),
         "queue_depth": app.state.scheduler.get_queue_depth()
     }
+
+
+@app.get("/metrics")
+async def metrics():
+    """Prometheus metrics endpoint"""
+    from fastapi.responses import Response
+    return Response(content=get_metrics(), media_type=CONTENT_TYPE_LATEST)
 

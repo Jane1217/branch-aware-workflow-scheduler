@@ -3,6 +3,7 @@ Branch-aware scheduler
 Enforces serial execution within branches, parallel across branches
 """
 import asyncio
+import time
 from typing import Dict, Deque, Set, Optional
 from collections import defaultdict, deque
 from datetime import datetime
@@ -11,6 +12,13 @@ from app.config import settings
 from app.models.job import Job, JobStatus
 from app.core.user_limit import UserLimitManager
 from app.core.tenant_manager import TenantManager
+from app.utils.metrics import (
+    update_queue_depth,
+    update_worker_active_jobs,
+    record_job_latency,
+    increment_jobs_total,
+    update_active_users
+)
 
 
 class BranchAwareScheduler:
@@ -129,6 +137,19 @@ class BranchAwareScheduler:
             if queue and branch not in branches_with_running_jobs
         ]
         
+        # Update queue depth metrics
+        for branch, queue in self.branch_queues.items():
+            # Get tenant_id from first job in queue (if any)
+            tenant_id = queue[0].tenant_id if queue else "unknown"
+            update_queue_depth(tenant_id, branch, len(queue))
+        
+        # Update active workers metric
+        update_worker_active_jobs(len(self.running_jobs))
+        
+        # Update active users metric
+        active_count = await self.user_limit_manager.get_active_count()
+        update_active_users(active_count)
+        
         for branch in branches_with_jobs:
             if len(self.running_jobs) >= settings.MAX_WORKERS:
                 break  # Reached global limit
@@ -173,6 +194,10 @@ class BranchAwareScheduler:
                 self.running_jobs[job.job_id] = job
                 job.status = JobStatus.RUNNING
                 job.started_at = datetime.now()
+                
+                # Update metrics
+                update_worker_active_jobs(len(self.running_jobs), job.tenant_id)
+                update_queue_depth(job.tenant_id, branch, len(queue))
                 
                 # Notify workflow engine about job status change
                 await self._notify_workflow_engine(job)
@@ -240,10 +265,18 @@ class BranchAwareScheduler:
     
     async def _execute_job(self, job: Job):
         """Execute a job and handle completion"""
+        start_time = time.time()
+        job_type = job.job_type.value if hasattr(job.job_type, 'value') else str(job.job_type)
+        
         # Check if job was cancelled before execution
         if job.job_id in self.cancelled_jobs:
             job.status = JobStatus.CANCELLED
             job.completed_at = datetime.now()
+            duration = time.time() - start_time
+            # Update metrics
+            record_job_latency(job_type, job.branch, job.tenant_id, "CANCELLED", duration)
+            increment_jobs_total(job_type, "CANCELLED", job.tenant_id)
+            update_worker_active_jobs(len(self.running_jobs) - 1, job.tenant_id)
             self.worker_semaphore.release()
             async with self.lock:
                 self.running_jobs.pop(job.job_id, None)
@@ -268,10 +301,16 @@ class BranchAwareScheduler:
         finally:
             # Mark as completed
             job.completed_at = datetime.now()
+            duration = time.time() - start_time
             
             # Only set as SUCCEEDED if not already FAILED
             if job.status != JobStatus.FAILED:
                 job.status = JobStatus.SUCCEEDED
+            
+            # Update metrics
+            status_str = job.status.value if hasattr(job.status, 'value') else str(job.status)
+            record_job_latency(job_type, job.branch, job.tenant_id, status_str, duration)
+            increment_jobs_total(job_type, status_str, job.tenant_id)
             
             # Notify workflow engine about job completion
             await self._notify_workflow_engine(job)
@@ -286,6 +325,7 @@ class BranchAwareScheduler:
                 self.job_executors.pop(job.job_id, None)
                 self.job_dependencies.pop(job.job_id, None)
                 self.tenant_manager.remove_job(job.tenant_id, job.job_id)
+                update_worker_active_jobs(len(self.running_jobs), job.tenant_id)
                 
                 # Check if tenant has no more jobs/workflows
                 tenant_jobs = self.tenant_manager.get_tenant_jobs(job.tenant_id)

@@ -1,0 +1,205 @@
+{
+  "dashboard": {
+    "title": "Workflow Scheduler Dashboard",
+    "tags": ["workflow", "scheduler", "monitoring"],
+    "timezone": "browser",
+    "schemaVersion": 16,
+    "version": 1,
+    "refresh": "10s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "System Health Overview",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "Active Workers vs Max Workers",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "worker_active_jobs{tenant_id=\"global\"}",
+            "legendFormat": "Active Workers"
+          },
+          {
+            "expr": "10",
+            "legendFormat": "Max Workers"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 0, "y": 1},
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 7, "color": "yellow"},
+                {"value": 9, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 3,
+        "title": "Active Users",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "active_users",
+            "legendFormat": "Active Users"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 6, "x": 6, "y": 1},
+        "fieldConfig": {
+          "defaults": {
+            "color": {"mode": "thresholds"},
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"value": 0, "color": "green"},
+                {"value": 2, "color": "yellow"},
+                {"value": 3, "color": "red"}
+              ]
+            }
+          }
+        }
+      },
+      {
+        "id": 4,
+        "title": "HTTP Request Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_requests_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 1}
+      },
+      {
+        "id": 5,
+        "title": "API Latency (P95)",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9}
+      },
+      {
+        "id": 6,
+        "title": "Error Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(http_errors_total[5m])",
+            "legendFormat": "{{method}} {{endpoint}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9}
+      },
+      {
+        "id": 7,
+        "title": "Business Scheduling Metrics",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 17}
+      },
+      {
+        "id": 8,
+        "title": "Per-Branch Queue Depth",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "queue_depth",
+            "legendFormat": "{{branch_name}} ({{tenant_id}})"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 18}
+      },
+      {
+        "id": 9,
+        "title": "Job Completion Rate",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(jobs_total[5m])",
+            "legendFormat": "{{job_type}} - {{status}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 18}
+      },
+      {
+        "id": 10,
+        "title": "Average Job Latency per Minute",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "rate(job_latency_seconds_sum[1m]) / rate(job_latency_seconds_count[1m])",
+            "legendFormat": "{{job_type}} - {{branch}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 26}
+      },
+      {
+        "id": 11,
+        "title": "Job Latency Distribution",
+        "type": "heatmap",
+        "targets": [
+          {
+            "expr": "rate(job_latency_seconds_bucket[5m])",
+            "legendFormat": "{{le}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 26}
+      },
+      {
+        "id": 12,
+        "title": "Tenant/Performance Isolation",
+        "type": "row",
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 34}
+      },
+      {
+        "id": 13,
+        "title": "Active Jobs per Tenant",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "worker_active_jobs{tenant_id!=\"global\"}",
+            "legendFormat": "{{tenant_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 35}
+      },
+      {
+        "id": 14,
+        "title": "Queue Depth per Tenant",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "sum by (tenant_id) (queue_depth)",
+            "legendFormat": "{{tenant_id}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 35}
+      },
+      {
+        "id": 15,
+        "title": "Job Latency by Tenant",
+        "type": "graph",
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(job_latency_seconds_bucket{tenant_id!=\"\"}[5m]))",
+            "legendFormat": "{{tenant_id}} - {{job_type}}"
+          }
+        ],
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 43}
+      }
+    ]
+  }
+}
+

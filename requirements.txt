@@ -24,6 +24,9 @@ redis>=5.0.0
 celery>=5.3.0
 # asyncio is built-in, no need to install
 
+# Redis async support for rate limiting
+redis[hiredis]>=5.0.0
+
 # Database (optional, can use in-memory for MVP)
 sqlalchemy>=2.0.0
 alembic>=1.12.0
