@@ -80,12 +80,12 @@ async def get_visualization_data(
 @router.get("/{job_id}/visualization/tiles")
 async def get_visualization_tiles(
     job_id: str,
+    request: Request,
     level: int = 0,
     x: Optional[int] = None,
     y: Optional[int] = None,
     width: Optional[int] = None,
     height: Optional[int] = None,
-    request: Request = None,
     tenant_id: str = Depends(get_tenant_id),
     workflow_engine: WorkflowEngine = Depends(get_workflow_engine)
 ):

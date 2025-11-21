@@ -96,6 +96,10 @@ function showTab(tabName) {
     // Load data if needed
     if (tabName === 'workflows') {
         loadWorkflows();
+    } else if (tabName === 'visualization') {
+        loadVisualizationJobList();
+    } else if (tabName === 'monitoring') {
+        loadMonitoringData();
     }
 }
 
@@ -799,6 +803,291 @@ function showNotification(message, type = 'info') {
         notification.classList.remove('show');
         setTimeout(() => notification.remove(), 300);
     }, 3000);
+}
+
+// Visualization functions
+let autoMonitoringInterval = null;
+
+async function loadVisualizationJobList() {
+    userId = document.getElementById('userId').value;
+    if (!userId) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/workflows`, {
+            headers: {
+                'X-User-ID': userId
+            }
+        });
+
+        if (response.ok) {
+            const workflows = await response.json();
+            const select = document.getElementById('visualizationJobId');
+            if (!select) return;
+            
+            select.innerHTML = '<option value="">-- Select a completed job --</option>';
+            
+            workflows.forEach(workflow => {
+                workflow.jobs.forEach(job => {
+                    if (job.status === 'SUCCEEDED' && job.job_type === 'cell_segmentation') {
+                        const option = document.createElement('option');
+                        option.value = job.job_id;
+                        option.textContent = `${job.job_id.split('_').pop()} - ${job.image_path.split('/').pop()}`;
+                        select.appendChild(option);
+                    }
+                });
+            });
+        }
+    } catch (error) {
+        // Silent error handling
+    }
+}
+
+async function loadVisualization() {
+    const jobId = document.getElementById('visualizationJobId')?.value;
+    if (!jobId) {
+        showNotification('Please select a job', 'warning');
+        return;
+    }
+
+    userId = document.getElementById('userId').value;
+    if (!userId) {
+        showNotification('Please enter a User ID', 'error');
+        return;
+    }
+
+    const container = document.getElementById('visualizationContainer');
+    if (!container) return;
+    
+    container.innerHTML = '<div class="loading">Loading visualization...</div>';
+
+    try {
+        const response = await fetch(`http://localhost:8000/api/visualization/${jobId}/visualization`, {
+            headers: {
+                'X-User-ID': userId
+            }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            displayVisualization(data);
+        } else {
+            const error = await response.json();
+            container.innerHTML = `<div class="error">Error: ${error.detail || 'Failed to load visualization'}</div>`;
+        }
+    } catch (error) {
+        container.innerHTML = `<div class="error">Failed to load visualization: ${error.message}</div>`;
+    }
+}
+
+function displayVisualization(data) {
+    const container = document.getElementById('visualizationContainer');
+    if (!container) return;
+    
+    let html = `
+        <div class="visualization-header">
+            <h3>Job: ${escapeHtml(data.job_id.split('_').pop())}</h3>
+            <p><strong>Image:</strong> ${escapeHtml(data.image_path.split('/').pop())}</p>
+            <p><strong>Total Cells:</strong> ${data.total_cells}</p>
+            <p><strong>Status:</strong> ${data.status}</p>
+            <p><strong>Progress:</strong> ${(data.progress * 100).toFixed(1)}%</p>
+        </div>
+    `;
+
+    if (data.cells && data.cells.length > 0) {
+        html += `
+            <div class="visualization-canvas-container">
+                <canvas id="visualizationCanvas" width="800" height="600"></canvas>
+                <div class="visualization-controls">
+                    <label>
+                        <input type="checkbox" id="showCells" checked onchange="updateVisualization()">
+                        Show Cell Outlines
+                    </label>
+                    <label>
+                        <input type="checkbox" id="showCentroids" checked onchange="updateVisualization()">
+                        Show Centroids
+                    </label>
+                    <button class="btn-small" onclick="resetVisualizationView()">Reset View</button>
+                </div>
+            </div>
+            <div class="visualization-stats">
+                <h4>Cell Statistics</h4>
+                <p>Total cells detected: ${data.total_cells}</p>
+                <p>Tiles processed: ${data.tiles_processed} / ${data.tiles_total}</p>
+            </div>
+        `;
+        
+        container.innerHTML = html;
+        
+        // Store visualization data globally for canvas rendering
+        window.visualizationData = data;
+        
+        // Draw visualization
+        setTimeout(() => {
+            drawVisualization(data);
+        }, 100);
+    } else {
+        html += `
+            <div class="visualization-placeholder">
+                <p>No cells detected in this job.</p>
+            </div>
+        `;
+        container.innerHTML = html;
+    }
+}
+
+function drawVisualization(data) {
+    const canvas = document.getElementById('visualizationCanvas');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Scale factor to fit cells in canvas
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    data.cells.forEach(cell => {
+        if (cell.polygon && cell.polygon.length > 0) {
+            cell.polygon.forEach(point => {
+                minX = Math.min(minX, point[0]);
+                minY = Math.min(minY, point[1]);
+                maxX = Math.max(maxX, point[0]);
+                maxY = Math.max(maxY, point[1]);
+            });
+        }
+    });
+    
+    if (minX === Infinity) return; // No valid cells
+    
+    const scaleX = (canvas.width - 40) / (maxX - minX || 1);
+    const scaleY = (canvas.height - 40) / (maxY - minY || 1);
+    const scale = Math.min(scaleX, scaleY, 1);
+    
+    const offsetX = (canvas.width - (maxX - minX) * scale) / 2 - minX * scale;
+    const offsetY = (canvas.height - (maxY - minY) * scale) / 2 - minY * scale;
+    
+    // Draw cells
+    data.cells.forEach((cell, index) => {
+        if (cell.polygon && cell.polygon.length > 0) {
+            ctx.beginPath();
+            ctx.strokeStyle = `hsl(${(index * 137.5) % 360}, 70%, 50%)`;
+            ctx.fillStyle = `hsla(${(index * 137.5) % 360}, 70%, 50%, 0.2)`;
+            ctx.lineWidth = 2;
+            
+            cell.polygon.forEach((point, i) => {
+                const x = point[0] * scale + offsetX;
+                const y = point[1] * scale + offsetY;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            });
+            ctx.closePath();
+            ctx.fill();
+            
+            if (document.getElementById('showCells')?.checked) {
+                ctx.stroke();
+            }
+            
+            // Draw centroid
+            if (cell.centroid && document.getElementById('showCentroids')?.checked) {
+                ctx.fillStyle = 'red';
+                ctx.beginPath();
+                ctx.arc(
+                    cell.centroid[0] * scale + offsetX,
+                    cell.centroid[1] * scale + offsetY,
+                    3, 0, 2 * Math.PI
+                );
+                ctx.fill();
+            }
+        }
+    });
+}
+
+function updateVisualization() {
+    if (window.visualizationData) {
+        drawVisualization(window.visualizationData);
+    }
+}
+
+function resetVisualizationView() {
+    if (window.visualizationData) {
+        drawVisualization(window.visualizationData);
+    }
+}
+
+// Monitoring functions
+async function loadMonitoringData() {
+    try {
+        const response = await fetch('http://localhost:8000/health');
+        
+        if (response.ok) {
+            const data = await response.json();
+            displayMonitoringData(data);
+        } else {
+            showNotification('Failed to load monitoring data', 'error');
+        }
+    } catch (error) {
+        showNotification('Failed to load monitoring data', 'error');
+    }
+}
+
+function displayMonitoringData(data) {
+    const healthEl = document.getElementById('systemHealth');
+    const workersEl = document.getElementById('activeWorkers');
+    const queueEl = document.getElementById('queueDepth');
+    const usersEl = document.getElementById('activeUsers');
+    
+    if (healthEl) {
+        healthEl.innerHTML = `
+            <div class="health-status ${data.status === 'healthy' ? 'healthy' : 'unhealthy'}">
+                <span class="status-indicator">${data.status === 'healthy' ? '🟢' : '🔴'}</span>
+                <span>${data.status.toUpperCase()}</span>
+            </div>
+        `;
+    }
+    
+    if (workersEl) {
+        workersEl.innerHTML = `
+            <div class="metric-value">${data.running_jobs || 0}</div>
+            <div class="metric-label">/ 10 max</div>
+        `;
+    }
+    
+    if (queueEl) {
+        queueEl.innerHTML = `
+            <div class="metric-value">${data.queue_depth || 0}</div>
+            <div class="metric-label">jobs waiting</div>
+        `;
+    }
+    
+    if (usersEl) {
+        usersEl.innerHTML = `
+            <div class="metric-value">${data.active_users || 0}</div>
+            <div class="metric-label">/ 3 max</div>
+        `;
+    }
+}
+
+function startAutoMonitoring() {
+    if (autoMonitoringInterval) return;
+    
+    loadMonitoringData();
+    autoMonitoringInterval = setInterval(() => {
+        loadMonitoringData();
+    }, 10000); // Refresh every 10 seconds
+    
+    showNotification('Auto-monitoring started (10s interval)', 'success');
+}
+
+function stopAutoMonitoring() {
+    if (autoMonitoringInterval) {
+        clearInterval(autoMonitoringInterval);
+        autoMonitoringInterval = null;
+        showNotification('Auto-monitoring stopped', 'info');
+    }
 }
 
 function escapeHtml(text) {
