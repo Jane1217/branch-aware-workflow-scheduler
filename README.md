@@ -94,8 +94,8 @@ A high-performance workflow scheduler for large-image inference tasks with branc
 #### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd "Branch-Aware, Multi-Tenant Workflow Scheduler"
+git clone https://github.com/Jane1217/branch-aware-workflow-scheduler.git
+cd branch-aware-workflow-scheduler
 ```
 
 #### 2. Create Virtual Environment
@@ -144,6 +144,10 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 Start all services using Docker Compose:
 
 ```bash
+# For Docker Compose v2 (recommended)
+docker compose up -d
+
+# Or for Docker Compose v1
 docker-compose up -d
 ```
 
