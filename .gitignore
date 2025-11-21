@@ -64,6 +64,9 @@ outputs/
 uploads/
 Aperio SVS/
 
+# Demo files
+demo.mov
+
 # Logs
 *.log
 logs/

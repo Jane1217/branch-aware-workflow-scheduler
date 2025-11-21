@@ -4,9 +4,11 @@ A high-performance workflow scheduler for large-image inference tasks with branc
 
 ## Demo
 
-[![Demo Video](demo.mov)](demo.mov)
+Watch the demo video to see the system in action:
 
-Watch the demo video to see the system in action: [demo.mov](demo.mov)
+[![Demo Video](https://img.shields.io/badge/Watch-Demo%20Video-blue)](demo.mp4)
+
+Or download: [demo.mp4](demo.mp4)
 
 ## Features
 
