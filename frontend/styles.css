@@ -372,14 +372,6 @@ button:disabled {
     align-items: center;
 }
 
-.auto-refresh {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    font-size: 14px;
-    color: #666;
-}
-
 .workflows-grid {
     display: grid;
     gap: 20px;

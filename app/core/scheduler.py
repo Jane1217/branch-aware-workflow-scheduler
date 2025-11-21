@@ -36,6 +36,9 @@ class BranchAwareScheduler:
         # Currently running jobs: job_id -> Job
         self.running_jobs: Dict[str, Job] = {}
         
+        # Cancelled jobs: job_id -> True (jobs cancelled while in queue)
+        self.cancelled_jobs: Set[str] = set()
+        
         # Branch locks: branch_id -> asyncio.Lock (ensures serial execution per branch)
         self.branch_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         
@@ -135,6 +138,18 @@ class BranchAwareScheduler:
             # Get next job from branch queue
             job = queue[0]
             
+            # Check if job was cancelled
+            if job.job_id in self.cancelled_jobs:
+                # Remove cancelled job from queue
+                queue.popleft()
+                self.cancelled_jobs.discard(job.job_id)
+                self.job_executors.pop(job.job_id, None)
+                self.job_dependencies.pop(job.job_id, None)
+                self.tenant_manager.remove_job(job.tenant_id, job.job_id)
+                job.status = JobStatus.CANCELLED
+                job.completed_at = datetime.now()
+                continue
+            
             # Check if user has active slot (CRITICAL: enforce 3-user limit)
             has_slot = await self.user_limit_manager.is_active(job.tenant_id)
             if not has_slot:
@@ -168,6 +183,7 @@ class BranchAwareScheduler:
         1. The dependency job is in completed_jobs (SUCCEEDED or FAILED)
         
         If a dependency is still running or pending, the job must wait.
+        Note: Dependencies use globally unique job_ids (workflow_id_job_id format).
         """
         if job_id not in self.job_dependencies:
             return True  # No dependencies
@@ -180,6 +196,10 @@ class BranchAwareScheduler:
             if dep_id in self.running_jobs:
                 return False  # Dependency is still running
             
+            # If dependency is cancelled, treat as not completed (job should not run)
+            if dep_id in self.cancelled_jobs:
+                return False  # Dependency was cancelled
+            
             # If dependency is not completed, job must wait
             if dep_id not in self.completed_jobs:
                 return False  # Dependency not completed
@@ -187,8 +207,48 @@ class BranchAwareScheduler:
         # All dependencies are completed
         return True
     
+    async def cancel_job(self, job_id: str, tenant_id: str) -> bool:
+        """
+        Cancel a job that is still in the queue (before execution starts).
+        Returns True if job was cancelled, False if job not found or already running.
+        """
+        async with self.lock:
+            # Check if job is running
+            if job_id in self.running_jobs:
+                return False  # Cannot cancel running job
+            
+            # Check if job is in any queue
+            for queue in self.branch_queues.values():
+                for job in queue:
+                    if job.job_id == job_id and job.tenant_id == tenant_id:
+                        # Mark as cancelled
+                        self.cancelled_jobs.add(job_id)
+                        job.status = JobStatus.CANCELLED
+                        job.completed_at = datetime.now()
+                        return True
+            
+            # Check if job is already completed or cancelled
+            if job_id in self.completed_jobs or job_id in self.cancelled_jobs:
+                return False  # Already completed or cancelled
+            
+            return False  # Job not found
+    
     async def _execute_job(self, job: Job):
         """Execute a job and handle completion"""
+        # Check if job was cancelled before execution
+        if job.job_id in self.cancelled_jobs:
+            job.status = JobStatus.CANCELLED
+            job.completed_at = datetime.now()
+            self.worker_semaphore.release()
+            async with self.lock:
+                self.running_jobs.pop(job.job_id, None)
+                self.cancelled_jobs.discard(job.job_id)
+                self.completed_jobs.add(job.job_id)
+                self.job_executors.pop(job.job_id, None)
+                self.job_dependencies.pop(job.job_id, None)
+                self.tenant_manager.remove_job(job.tenant_id, job.job_id)
+            return
+        
         try:
             # Get executor callback for this job
             executor = self.job_executors.get(job.job_id)
@@ -216,6 +276,7 @@ class BranchAwareScheduler:
                 self.running_jobs.pop(job.job_id, None)
                 self.completed_jobs.add(job.job_id)
                 self.job_executors.pop(job.job_id, None)
+                self.job_dependencies.pop(job.job_id, None)
                 self.tenant_manager.remove_job(job.tenant_id, job.job_id)
                 
                 # Check if tenant has no more jobs/workflows

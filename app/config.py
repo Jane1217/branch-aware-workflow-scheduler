@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     TILE_SIZE: int = 512  # Tile size in pixels (smaller = more tiles but faster per-tile)
     TILE_OVERLAP: int = 64  # Overlap between tiles to avoid seams (pixels)
     BATCH_SIZE: int = 2  # Number of tiles processed in parallel per batch (1 = sequential batches)
-    WSI_LEVEL: int = 0  # WSI pyramid level (0=highest res, 1=faster with good quality, 2=fastest)
+    WSI_LEVEL: int = 1  # WSI pyramid level (0=highest res, 1=faster with good quality, 2=fastest)
     
     # Concurrency Settings
     # Reduced to 1 for better responsiveness on single-user systems

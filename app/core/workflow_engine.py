@@ -148,9 +148,9 @@ class WorkflowEngine:
         total_progress = sum(job.progress for job in workflow.jobs)
         workflow.progress = total_progress / len(workflow.jobs)
         
-        # Check if all jobs are completed
+        # Check if all jobs are completed (SUCCEEDED, FAILED, or CANCELLED)
         all_completed = all(
-            job.status in [JobStatus.SUCCEEDED, JobStatus.FAILED]
+            job.status in [JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED]
             for job in workflow.jobs
         )
         

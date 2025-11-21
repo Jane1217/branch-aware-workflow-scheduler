@@ -54,27 +54,57 @@ async def create_workflow(
     workflow_engine: WorkflowEngine = Depends(get_workflow_engine)
 ):
     """Create a new workflow"""
-    # Convert JobCreate to Job
+    # Create workflow first to get workflow_id
+    workflow = Workflow(
+        name=workflow_data.name,
+        tenant_id=tenant_id,
+        jobs=[],  # Will be populated below
+        metadata=workflow_data.metadata
+    )
+    
+    # Convert JobCreate to Job with globally unique job_id
+    # If job_id is provided, prefix it with workflow_id to ensure uniqueness
+    # If not provided, generate a unique one
+    from uuid import uuid4
     jobs = []
     for job_create in workflow_data.jobs:
+        # Ensure job_id is globally unique by prefixing with workflow_id
+        if job_create.job_id:
+            # Prefix with workflow_id to ensure uniqueness across workflows
+            unique_job_id = f"{workflow.workflow_id}_{job_create.job_id}"
+        else:
+            # Generate a unique job_id
+            unique_job_id = str(uuid4())
+        
+        # Process depends_on: if dependencies are provided, they need to be prefixed with workflow_id
+        # to match the globally unique job_ids
+        depends_on = []
+        if job_create.depends_on:
+            for dep_id in job_create.depends_on:
+                # If dependency is already prefixed with workflow_id, use as is
+                # Otherwise, try to find it in the current workflow's jobs
+                if '_' in dep_id and len(dep_id.split('_')) >= 2:
+                    # Already has workflow_id prefix, use as is
+                    depends_on.append(dep_id)
+                else:
+                    # Try to find the dependency in current workflow's jobs
+                    # For now, we'll assume dependencies within the same workflow
+                    # and prefix with current workflow_id
+                    depends_on.append(f"{workflow.workflow_id}_{dep_id}")
+        
         job = Job(
-            job_id=job_create.job_id or None,
+            job_id=unique_job_id,
             job_type=job_create.job_type,
             image_path=job_create.image_path,
             branch=job_create.branch,
             tenant_id=tenant_id,
-            depends_on=job_create.depends_on,
+            depends_on=depends_on,
             metadata=job_create.metadata
         )
         jobs.append(job)
     
-    # Create workflow
-    workflow = Workflow(
-        name=workflow_data.name,
-        tenant_id=tenant_id,
-        jobs=jobs,
-        metadata=workflow_data.metadata
-    )
+    # Assign jobs to workflow
+    workflow.jobs = jobs
     
     # Submit to engine
     workflow = await workflow_engine.create_workflow(workflow)
@@ -119,7 +149,7 @@ async def list_workflows(
             status=w.status,
             progress=w.progress,
             job_count=len(w.jobs),
-            jobs_completed=sum(1 for j in w.jobs if j.status.value in ["SUCCEEDED", "FAILED", "CANCELLED"]),
+            jobs_completed=sum(1 for j in w.jobs if j.status.value in ["SUCCEEDED", "FAILED"]),
             created_at=w.created_at,
             started_at=w.started_at,
             completed_at=w.completed_at,

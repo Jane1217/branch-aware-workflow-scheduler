@@ -3,6 +3,8 @@ const API_BASE = 'http://localhost:8000/api';
 let userId = 'user-1';
 let wsConnection = null;
 let autoRefreshInterval = null;
+let autoRefreshCheckInterval = null; // Track the WebSocket status check interval
+let currentRefreshInterval = null; // Track the current refresh interval value
 
 // Available images (will be loaded from server)
 const AVAILABLE_IMAGES = [
@@ -71,16 +73,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     workflowForm.addEventListener('submit', handleSubmitWorkflow);
-    document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
     
     // Load initial data
     loadWorkflows();
     updateAvailableImages();
     
-    // Start auto-refresh if enabled
-    if (document.getElementById('autoRefresh').checked) {
-        startAutoRefresh();
-    }
+    // Start auto-refresh automatically
+    startAutoRefresh();
     
     // Don't auto-connect WebSocket - user must click Connect button
 });
@@ -100,14 +99,6 @@ function showTab(tabName) {
     }
 }
 
-function toggleAutoRefresh() {
-    if (document.getElementById('autoRefresh').checked) {
-        startAutoRefresh();
-    } else {
-        stopAutoRefresh();
-    }
-}
-
 function startAutoRefresh() {
     if (autoRefreshInterval) return;
     
@@ -117,7 +108,11 @@ function startAutoRefresh() {
         ? 3000  // 3 seconds when WebSocket is active (WebSocket handles real-time updates)
         : 2000;  // 2 seconds when WebSocket is disconnected (fallback polling)
     
+    currentRefreshInterval = refreshInterval; // Save current interval
     autoRefreshInterval = setInterval(async () => {
+        // Check if auto-refresh was stopped (e.g., by loadWorkflows detecting completion)
+        if (!autoRefreshInterval) return;
+        
         if (document.getElementById('workflowsTab').classList.contains('active')) {
             await loadWorkflows(); // loadWorkflows now checks if all workflows are completed and stops auto-refresh
         }
@@ -126,25 +121,43 @@ function startAutoRefresh() {
     // Also check immediately if workflows are already completed
     // This handles the case where user opens the page after workflows are done
     setTimeout(async () => {
+        // Check if auto-refresh was stopped before this timeout fires
+        if (!autoRefreshInterval) return;
+        
         if (document.getElementById('workflowsTab').classList.contains('active')) {
             await loadWorkflows();
+            // After loadWorkflows, check if it stopped auto-refresh
+            if (!autoRefreshInterval) return;
         }
     }, 100);
     
     // Re-adjust interval if WebSocket connection status changes
-    setInterval(() => {
-        if (autoRefreshInterval) {
-            stopAutoRefresh();
-            startAutoRefresh(); // Restart with new interval based on WebSocket status
-        }
-    }, 8000); // Check every 8 seconds
+    // Only create one check interval, and clear it when stopping
+    if (!autoRefreshCheckInterval) {
+        autoRefreshCheckInterval = setInterval(() => {
+            if (autoRefreshInterval) {
+                const newInterval = (wsConnection && wsConnection.readyState === WebSocket.OPEN) ? 3000 : 2000;
+                // Only restart if interval actually changed
+                if (newInterval !== currentRefreshInterval) {
+                    stopAutoRefresh();
+                    startAutoRefresh(); // Restart with new interval based on WebSocket status
+                }
+            }
+        }, 8000); // Check every 8 seconds
+    }
 }
 
 function stopAutoRefresh() {
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
+        console.log('Auto-refresh stopped');
     }
+    if (autoRefreshCheckInterval) {
+        clearInterval(autoRefreshCheckInterval);
+        autoRefreshCheckInterval = null;
+    }
+    currentRefreshInterval = null;
 }
 
 function connectWebSocket() {
@@ -171,8 +184,11 @@ function connectWebSocket() {
     wsConnection.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'job_progress' || data.type === 'workflow_progress') {
-            // Immediately refresh workflows to show updated progress (no delay)
-            loadWorkflows();
+            // Only refresh if auto-refresh is active (workflows are still running)
+            // If auto-refresh is stopped, it means all workflows are completed
+            if (autoRefreshInterval) {
+                loadWorkflows();
+            }
             
             // Show notification for significant progress updates
             if (data.progress >= 1.0) {
@@ -410,12 +426,8 @@ async function handleSubmitWorkflow(e) {
             // Immediately load workflows to show the new one
             await loadWorkflows();
             
-            // Ensure auto-refresh is enabled and start it
-            const autoRefreshCheckbox = document.getElementById('autoRefresh');
-            if (autoRefreshCheckbox) {
-                autoRefreshCheckbox.checked = true;
-                startAutoRefresh();
-            }
+            // Start auto-refresh
+            startAutoRefresh();
         } else {
             const error = await response.json();
             showNotification(`Error: ${error.detail || 'Failed to create workflow'}`, 'error');
@@ -450,13 +462,27 @@ async function loadWorkflows() {
             
             // Check if all workflows are completed (SUCCEEDED or FAILED)
             // If all are completed, stop auto-refresh to avoid unnecessary GET requests
-            const allCompleted = workflows.length > 0 && workflows.every(w => {
-                const status = String(w.status).toUpperCase();
-                return status === 'SUCCEEDED' || status === 'FAILED';
-            });
-            
-            if (allCompleted && autoRefreshInterval) {
-                stopAutoRefresh();
+            if (workflows.length > 0) {
+                const allCompleted = workflows.every(w => {
+                    // Handle both enum objects and strings
+                    const status = (w.status && typeof w.status === 'object' && w.status.value) 
+                        ? w.status.value.toUpperCase() 
+                        : String(w.status || '').toUpperCase();
+                    return status === 'SUCCEEDED' || status === 'FAILED';
+                });
+                
+                if (allCompleted) {
+                    if (autoRefreshInterval) {
+                        console.log('All workflows completed, stopping auto-refresh');
+                        stopAutoRefresh();
+                    }
+                } else {
+                    // If not all completed, ensure auto-refresh is running
+                    if (!autoRefreshInterval) {
+                        console.log('Workflows still running, starting auto-refresh');
+                        startAutoRefresh();
+                    }
+                }
             }
         } else {
             document.getElementById('workflowsList').innerHTML = '<div class="empty-state"><p>Error loading workflows</p></div>';
@@ -538,7 +564,7 @@ function displayWorkflows(workflows) {
                     ${workflow.jobs.map(job => `
                         <div class="job-detail-item">
                             <div class="job-detail-header">
-                                <span class="job-id">${escapeHtml(job.job_id)}</span>
+                                <span class="job-id">${escapeHtml(job.job_id.includes('_') ? job.job_id.split('_').pop() : job.job_id)}</span>
                                 <span class="job-type-badge">${job.job_type.replace('_', ' ')}</span>
                                 <span class="status-badge status-${job.status.toLowerCase()}">${job.status}</span>
                             </div>
@@ -546,12 +572,18 @@ function displayWorkflows(workflows) {
                                 <div class="job-progress">
                                     <span>Progress: ${(job.progress * 100).toFixed(1)}%</span>
                                     ${job.image_path ? `<span class="image-info">Image: ${escapeHtml(job.image_path.split('/').pop())}</span>` : ''}
+                                    ${job.tiles_processed !== undefined && job.tiles_total !== undefined && job.tiles_total > 0 ? `
+                                        <span class="tiles-info">Tiles: ${job.tiles_processed} / ${job.tiles_total}</span>
+                                    ` : ''}
                                 </div>
                                 <div class="job-actions">
-                                    ${job.status === 'SUCCEEDED' ? `
+                                    ${(job.status === 'SUCCEEDED' || job.status?.toUpperCase() === 'SUCCEEDED') ? `
                                         <button class="btn-small primary" onclick="viewJobResults('${job.job_id}')">View Results</button>
                                     ` : ''}
-                                    ${job.status === 'FAILED' && job.error_message ? `
+                                    ${(job.status === 'PENDING' || job.status?.toUpperCase() === 'PENDING') ? `
+                                        <button class="btn-small danger" onclick="cancelJob('${job.job_id}')">Cancel</button>
+                                    ` : ''}
+                                    ${(job.status === 'FAILED' || job.status?.toUpperCase() === 'FAILED') && job.error_message ? `
                                         <span class="error-message" title="${escapeHtml(job.error_message)}">⚠️ Error</span>
                                     ` : ''}
                                 </div>
@@ -591,6 +623,38 @@ function toggleJobs(button, workflowId) {
     }
 }
 
+
+async function cancelJob(jobId) {
+    userId = document.getElementById('userId').value;
+    if (!userId) {
+        showNotification('Please enter a User ID', 'error');
+        return;
+    }
+
+    if (!confirm(`Are you sure you want to cancel job ${jobId}?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/jobs/${jobId}`, {
+            method: 'DELETE',
+            headers: {
+                'X-User-ID': userId
+            }
+        });
+
+        if (response.ok) {
+            showNotification('Job cancelled successfully', 'success');
+            loadWorkflows(); // Refresh to show updated status
+        } else {
+            const error = await response.json();
+            showNotification(`Error: ${error.detail || 'Failed to cancel job'}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        showNotification('Failed to cancel job', 'error');
+    }
+}
 
 async function viewJobResults(jobId) {
     userId = document.getElementById('userId').value;

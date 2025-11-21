@@ -118,4 +118,41 @@ async def get_job_results(
     raise HTTPException(status_code=404, detail="Job not found")
 
 
+@router.delete("/{job_id}")
+async def cancel_job(
+    job_id: str,
+    request: Request,
+    tenant_id: str = Depends(get_tenant_id),
+    scheduler: BranchAwareScheduler = Depends(get_scheduler),
+    workflow_engine: WorkflowEngine = Depends(get_workflow_engine)
+):
+    """
+    Cancel a job that is still in the queue (before execution starts).
+    Jobs that are already running cannot be cancelled.
+    """
+    # Verify job belongs to tenant
+    workflows = workflow_engine.get_workflows_by_tenant(tenant_id)
+    job_found = False
+    for workflow in workflows:
+        for job in workflow.jobs:
+            if job.job_id == job_id:
+                job_found = True
+                break
+        if job_found:
+            break
+    
+    if not job_found:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    # Try to cancel the job
+    cancelled = await scheduler.cancel_job(job_id, tenant_id)
+    
+    if not cancelled:
+        raise HTTPException(
+            status_code=400,
+            detail="Job cannot be cancelled. It may already be running, completed, or not found in queue."
+        )
+    
+    return {"message": "Job cancelled successfully", "job_id": job_id}
+
 
