@@ -93,11 +93,27 @@ function toggleAutoRefresh() {
 
 function startAutoRefresh() {
     if (autoRefreshInterval) return;
+    
+    // Use longer interval when WebSocket is connected (WebSocket provides real-time updates)
+    // Use shorter interval as fallback when WebSocket is disconnected
+    const refreshInterval = (wsConnection && wsConnection.readyState === WebSocket.OPEN) 
+        ? 3000  // 3 seconds when WebSocket is active (WebSocket handles real-time updates)
+        : 2000;  // 2 seconds when WebSocket is disconnected (fallback polling)
+    
     autoRefreshInterval = setInterval(() => {
         if (document.getElementById('workflowsTab').classList.contains('active')) {
             loadWorkflows();
         }
-    }, 500); // Reduced from 2000ms to 500ms for smoother updates
+    }, refreshInterval);
+    
+    // Re-adjust interval if WebSocket connection status changes
+    const checkInterval = setInterval(() => {
+        const newInterval = (wsConnection && wsConnection.readyState === WebSocket.OPEN) ? 3000 : 2000;
+        if (autoRefreshInterval) {
+            stopAutoRefresh();
+            startAutoRefresh(); // Restart with new interval
+        }
+    }, 5000); // Check every 5 seconds
 }
 
 function stopAutoRefresh() {
