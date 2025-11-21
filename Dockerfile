@@ -1,9 +1,10 @@
 FROM python:3.11-slim
 
-# Install system dependencies for OpenSlide
+# Install system dependencies for OpenSlide and curl (for health checks)
 RUN apt-get update && apt-get install -y \
     openslide-tools \
     libopenslide-dev \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -15,8 +16,8 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install InstanSeg (if available)
-# RUN pip install git+https://github.com/instanseg/instanseg.git
+# Install InstanSeg
+RUN pip install git+https://github.com/instanseg/instanseg.git || echo "InstanSeg installation failed, will use fallback"
 
 # Copy application code
 COPY . .

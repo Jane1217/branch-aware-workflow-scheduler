@@ -11,7 +11,7 @@ export function updateAvailableImages() {
     if (!list) return;
     
     list.innerHTML = AVAILABLE_IMAGES.map(img => 
-        `<li><strong>${img.name}</strong> - ${img.description}</li>`
+        `<li><strong>${img.name}</strong></li>`
     ).join('');
 }
 
@@ -84,7 +84,7 @@ export function addJob() {
             >
                 <option value="">-- Select Image --</option>
                 ${AVAILABLE_IMAGES.map(img => 
-                    `<option value="${img.path}" ${img.recommended ? 'data-recommended="true"' : ''}>${img.name} - ${img.description}</option>`
+                    `<option value="${img.path}">${img.name}</option>`
                 ).join('')}
             </select>
             <small class="mt-1 block text-xs text-gray-500 dark:text-gray-400">
@@ -242,14 +242,17 @@ export async function handleSubmitWorkflow(e) {
         showTab('workflows');
         
         // Immediately load workflows to show the new one
+        // loadWorkflows() will automatically start auto-refresh if there are running jobs
         await loadWorkflows();
-        
-        // Start auto-refresh
-        startAutoRefresh();
     } catch (error) {
-        showNotification(`Error: ${error.message}`, 'error');
+        // Show detailed error message to help user fix the issue
+        const errorMessage = error.message || 'An unknown error occurred';
+        showNotification(errorMessage, 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = '🚀 Submit Workflow';
+        
+        // Keep form data so user can fix errors without losing their work
+        // Form is NOT reset on error, allowing user to correct and resubmit
     }
 }
 

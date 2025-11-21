@@ -67,13 +67,30 @@ async def create_workflow(
     # If not provided, generate a unique one
     from uuid import uuid4
     jobs = []
+    job_id_map = {}  # Map user-provided job_id to unique job_id for dependency validation
+    
+    # First pass: build job_id mapping and check for duplicates
     for job_create in workflow_data.jobs:
-        # Ensure job_id is globally unique by prefixing with workflow_id
         if job_create.job_id:
+            if job_create.job_id in job_id_map:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Duplicate job_id '{job_create.job_id}' found in workflow. Each job must have a unique job_id within the same workflow."
+                )
             # Prefix with workflow_id to ensure uniqueness across workflows
             unique_job_id = f"{workflow.workflow_id}_{job_create.job_id}"
+            job_id_map[job_create.job_id] = unique_job_id
         else:
             # Generate a unique job_id
+            unique_job_id = str(uuid4())
+            job_id_map[unique_job_id] = unique_job_id  # Map to itself for consistency
+    
+    # Second pass: create jobs with validated dependencies
+    for job_create in workflow_data.jobs:
+        # Get unique job_id
+        if job_create.job_id:
+            unique_job_id = job_id_map[job_create.job_id]
+        else:
             unique_job_id = str(uuid4())
         
         # Process depends_on: if dependencies are provided, they need to be prefixed with workflow_id
@@ -84,12 +101,21 @@ async def create_workflow(
                 # If dependency is already prefixed with workflow_id, use as is
                 # Otherwise, try to find it in the current workflow's jobs
                 if '_' in dep_id and len(dep_id.split('_')) >= 2:
-                    # Already has workflow_id prefix, use as is
+                    # Already has workflow_id prefix, validate it's in the same workflow
+                    if not dep_id.startswith(f"{workflow.workflow_id}_"):
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Job dependency '{dep_id}' references a job from a different workflow. Dependencies must reference job_ids within the same workflow."
+                        )
                     depends_on.append(dep_id)
                 else:
-                    # Try to find the dependency in current workflow's jobs
-                    # For now, we'll assume dependencies within the same workflow
-                    # and prefix with current workflow_id
+                    # Validate that the dependency exists in the current workflow
+                    if dep_id not in job_id_map:
+                        raise HTTPException(
+                            status_code=400,
+                            detail=f"Job dependency '{dep_id}' not found in workflow. Dependencies must reference job_ids within the same workflow."
+                        )
+                    # Prefix with current workflow_id
                     depends_on.append(f"{workflow.workflow_id}_{dep_id}")
         
         job = Job(
@@ -102,6 +128,41 @@ async def create_workflow(
             metadata=job_create.metadata
         )
         jobs.append(job)
+    
+    # Check for circular dependencies
+    def has_circular_dependency(job_id: str, visited: set, rec_stack: set, job_deps: dict) -> bool:
+        """Check if there's a circular dependency starting from job_id"""
+        visited.add(job_id)
+        rec_stack.add(job_id)
+        
+        for dep_id in job_deps.get(job_id, []):
+            # Only check dependencies that are in the same workflow
+            # (dependencies are already prefixed with workflow_id)
+            if dep_id.startswith(f"{workflow.workflow_id}_"):
+                if dep_id not in visited:
+                    if has_circular_dependency(dep_id, visited, rec_stack, job_deps):
+                        return True
+                elif dep_id in rec_stack:
+                    return True  # Circular dependency found
+        
+        rec_stack.remove(job_id)
+        return False
+    
+    # Build dependency graph for cycle detection
+    job_dependencies = {}
+    for job in jobs:
+        if job.depends_on:
+            job_dependencies[job.job_id] = job.depends_on
+    
+    # Check for cycles
+    visited = set()
+    for job in jobs:
+        if job.job_id not in visited:
+            if has_circular_dependency(job.job_id, visited, set(), job_dependencies):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Circular dependency detected in workflow. Jobs cannot depend on each other in a cycle."
+                )
     
     # Assign jobs to workflow
     workflow.jobs = jobs

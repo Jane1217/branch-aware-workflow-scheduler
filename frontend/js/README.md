@@ -66,8 +66,6 @@
 10. **monitoring.js** - Monitoring Features
     - `loadMonitoringData()`: Load monitoring data
     - `displayMonitoringData()`: Display monitoring data
-    - `startAutoMonitoring()`: Start auto-monitoring
-    - `stopAutoMonitoring()`: Stop auto-monitoring
     - `updateDashboardCharts()`: Update dashboard charts
 
 ### Entry Module
@@ -122,8 +120,6 @@ The following functions are exposed via the `window` object for use in HTML `onc
 - `loadVisualization()`: Load visualization
 - `updateVisualization()`: Update visualization
 - `loadMonitoringData()`: Load monitoring data
-- `startAutoMonitoring()`: Start auto-monitoring
-- `stopAutoMonitoring()`: Stop auto-monitoring
 
 ## Usage
 

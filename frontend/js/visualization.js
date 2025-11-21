@@ -20,44 +20,57 @@ export async function loadVisualizationJobList() {
         select.innerHTML = '<option value="">-- Select a completed job --</option>';
         
         let foundJobs = 0;
-        workflows.forEach(workflow => {
-            workflow.jobs.forEach(job => {
-                // Handle job status (can be object or string)
-                const jobStatus = (job.status && typeof job.status === 'object' && job.status.value) 
-                    ? job.status.value.toUpperCase() 
-                    : String(job.status || '').toUpperCase();
-                
-                // Handle job_type (can be object with .value or string)
-                // Backend returns job_type as string (j.job_type.value)
-                const jobType = (job.job_type && typeof job.job_type === 'object' && job.job_type.value)
-                    ? job.job_type.value
-                    : String(job.job_type || '');
-                
-                // Debug: log job details
-                if (jobStatus === 'SUCCEEDED') {
-                    foundJobs++;
-                }
-                
-                if (jobStatus === 'SUCCEEDED' && jobType === 'cell_segmentation') {
-                    const option = document.createElement('option');
-                    option.value = job.job_id;
-                    const jobIdDisplay = job.job_id.includes('_') ? job.job_id.split('_').pop() : job.job_id;
-                    const imageName = job.image_path ? job.image_path.split('/').pop() : 'unknown';
-                    option.textContent = `${jobIdDisplay} - ${imageName}`;
-                    select.appendChild(option);
-                }
-            });
+        let succeededJobs = 0;
+        
+        workflows.forEach((workflow) => {
+            if (workflow.jobs && workflow.jobs.length > 0) {
+                workflow.jobs.forEach((job) => {
+                    let jobStatus = '';
+                    if (job.status) {
+                        if (typeof job.status === 'object' && job.status.value) {
+                            jobStatus = String(job.status.value).toUpperCase();
+                        } else {
+                            jobStatus = String(job.status).toUpperCase();
+                        }
+                    }
+                    
+                    let jobType = '';
+                    if (job.job_type) {
+                        if (typeof job.job_type === 'object' && job.job_type.value) {
+                            jobType = String(job.job_type.value);
+                        } else {
+                            jobType = String(job.job_type);
+                        }
+                    }
+                    
+                    if (jobStatus === 'SUCCEEDED') {
+                        succeededJobs++;
+                    }
+                    
+                    if (jobStatus === 'SUCCEEDED' && jobType === 'cell_segmentation') {
+                        foundJobs++;
+                        const option = document.createElement('option');
+                        option.value = job.job_id;
+                        const jobIdDisplay = job.job_id.includes('_') ? job.job_id.split('_').pop() : job.job_id;
+                        const imageName = job.image_path ? job.image_path.split('/').pop() : 'unknown';
+                        option.textContent = `${jobIdDisplay} - ${imageName}`;
+                        select.appendChild(option);
+                    }
+                });
+            }
         });
         
-        // If no jobs found, show message
         if (select.options.length === 1) {
-            select.innerHTML = '<option value="">No completed cell_segmentation jobs found</option>';
+            if (succeededJobs > 0) {
+                select.innerHTML = `<option value="">Found ${succeededJobs} succeeded job(s), but none are cell_segmentation type</option>`;
+            } else {
+                select.innerHTML = '<option value="">No completed cell_segmentation jobs found</option>';
+            }
         }
     } catch (error) {
-        // Show error in select dropdown
         const select = document.getElementById('visualizationJobId');
         if (select) {
-            select.innerHTML = '<option value="">Error loading jobs. Please try again.</option>';
+            select.innerHTML = `<option value="">Error loading jobs: ${error.message}</option>`;
         }
     }
 }
@@ -254,4 +267,5 @@ export function updateVisualization() {
 // Make functions available globally for onclick handlers
 window.loadVisualization = loadVisualization;
 window.updateVisualization = updateVisualization;
+window.loadVisualizationJobList = loadVisualizationJobList;
 

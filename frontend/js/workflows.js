@@ -18,31 +18,44 @@ export async function loadWorkflows() {
         const workflows = await fetchWorkflows();
         displayWorkflows(workflows);
         
-        // Check if all workflows are completed (SUCCEEDED or FAILED)
-        // Only stop auto-refresh if ALL workflows are completed AND we're on workflows tab
+        // Check if there are any jobs in RUNNING status
+        // Auto-refresh should only run when there are running jobs
+        let hasRunningJob = false;
+        
         if (workflows.length > 0) {
-            const allCompleted = workflows.every(w => {
-                const status = (w.status && typeof w.status === 'object' && w.status.value) 
-                    ? w.status.value.toUpperCase() 
-                    : String(w.status || '').toUpperCase();
-                return status === 'SUCCEEDED' || status === 'FAILED';
-            });
-            
-            // Check if workflows tab is active before stopping
-            try {
-                const body = document.body;
-                const isWorkflowsTab = body && body.__x && body.__x.$data && body.__x.$data.activeTab === 'workflows';
-                if (allCompleted && isWorkflowsTab) {
-                    stopAutoRefresh();
-                } else if (!allCompleted) {
-                    // If not all completed, ensure auto-refresh is running
-                    if (!isAutoRefreshActive()) {
-                        startAutoRefresh();
+            for (const workflow of workflows) {
+                if (workflow.jobs && workflow.jobs.length > 0) {
+                    for (const job of workflow.jobs) {
+                        // Handle job status (can be object or string)
+                        let jobStatus = '';
+                        if (job.status) {
+                            if (typeof job.status === 'object' && job.status.value) {
+                                jobStatus = String(job.status.value).toUpperCase();
+                            } else {
+                                jobStatus = String(job.status).toUpperCase();
+                            }
+                        }
+                        
+                        if (jobStatus === 'RUNNING') {
+                            hasRunningJob = true;
+                            break;
+                        }
                     }
+                    if (hasRunningJob) break;
                 }
-            } catch (e) {
-                // If Alpine.js check fails, don't stop auto-refresh
-                // Keep refreshing to ensure data is up-to-date
+            }
+        }
+        
+        // Manage auto-refresh based on running jobs
+        if (hasRunningJob) {
+            // If there are running jobs, ensure auto-refresh is active
+            if (!isAutoRefreshActive()) {
+                startAutoRefresh();
+            }
+        } else {
+            // If no running jobs, stop auto-refresh
+            if (isAutoRefreshActive()) {
+                stopAutoRefresh();
             }
         }
     } catch (error) {

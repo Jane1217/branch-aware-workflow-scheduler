@@ -1,6 +1,7 @@
 version: '3.8'
 
 services:
+  # Backend API service
   api:
     build: .
     ports:
@@ -17,7 +18,38 @@ services:
     depends_on:
       - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
+  # Worker service for job processing
+  # Note: Currently uses the same image as API, but can be scaled independently
+  worker:
+    build: .
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    volumes:
+      - ./results:/app/results
+      - ./uploads:/app/uploads
+    environment:
+      - MAX_WORKERS=10
+      - MAX_ACTIVE_USERS=3
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - api
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Redis for distributed queue and rate limiting
   redis:
     image: redis:7-alpine
     ports:
@@ -25,8 +57,14 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
 
-  # Optional: Prometheus for metrics (bonus feature)
+  # Prometheus for metrics collection
   prometheus:
     image: prom/prometheus:latest
     ports:
@@ -36,23 +74,40 @@ services:
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
     restart: unless-stopped
+    depends_on:
+      - api
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
-  # Optional: Grafana for dashboards (bonus feature)
+  # Grafana for metrics visualization
   grafana:
     image: grafana/grafana:latest
     ports:
       - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./grafana-dashboard.json:/etc/grafana/provisioning/dashboards/dashboard.json:ro
     depends_on:
       - prometheus
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 volumes:
   redis_data:
   prometheus_data:
   grafana_data:
-

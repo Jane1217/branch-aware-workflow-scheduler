@@ -111,10 +111,12 @@ async def get_dashboard_metrics(request: Request):
             pass
         
         avg_latency = 0.0
+        avg_latency_by_tenant = {}
         active_users_count = 0
         
         # Calculate average latency from workflow engine (completed jobs in last 60 seconds)
         # Formula: Job Latency = completed_at - created_at (for jobs completed in last 60 seconds)
+        # IMPORTANT: Calculate per tenant_id to maintain tenant isolation
         try:
             from datetime import datetime, timedelta
             workflow_engine = request.app.state.workflow_engine
@@ -122,6 +124,7 @@ async def get_dashboard_metrics(request: Request):
                 now = datetime.now()
                 cutoff_time = now - timedelta(seconds=60)  # Last 60 seconds
                 latencies = []
+                latencies_by_tenant = {}  # Group by tenant_id
                 
                 for workflow in workflow_engine.workflows.values():
                     for job in workflow.jobs:
@@ -134,9 +137,21 @@ async def get_dashboard_metrics(request: Request):
                                 duration = (job.completed_at - job.created_at).total_seconds()
                                 if duration > 0:
                                     latencies.append(duration)
+                                    
+                                    # Also group by tenant_id for per-tenant calculation
+                                    tenant_id = job.tenant_id
+                                    if tenant_id not in latencies_by_tenant:
+                                        latencies_by_tenant[tenant_id] = []
+                                    latencies_by_tenant[tenant_id].append(duration)
                 
+                # Calculate global average
                 if latencies:
                     avg_latency = sum(latencies) / len(latencies)
+                
+                # Calculate per-tenant averages
+                for tenant_id, tenant_latencies in latencies_by_tenant.items():
+                    if tenant_latencies:
+                        avg_latency_by_tenant[tenant_id] = sum(tenant_latencies) / len(tenant_latencies)
         except Exception:
             pass
         
@@ -167,15 +182,16 @@ async def get_dashboard_metrics(request: Request):
                         queue_depth_by_branch[branch] = {}
                     queue_depth_by_branch[branch][tenant_id] = depth
             
-            # Override latency from Prometheus metrics if available (more accurate)
-            latency_sum_key = 'job_latency_seconds_sum'
-            latency_count_key = 'job_latency_seconds_count'
-            
-            if latency_sum_key in metrics and latency_count_key in metrics:
-                total_sum = sum(item['value'] for item in metrics[latency_sum_key])
-                total_count = sum(item['value'] for item in metrics[latency_count_key])
-                if total_count > 0:
-                    avg_latency = total_sum / total_count
+            # Note: We do NOT use Prometheus metrics for latency calculation
+            # because:
+            # 1. Prometheus Histogram accumulates all historical data (no time window)
+            # 2. Prometheus records execution time (started_at to completed_at)
+            # 3. Requirement specifies: "per minute" = past 60 seconds, total time (created_at to completed_at)
+            # 
+            # We use workflow_engine calculation above which:
+            # - Filters jobs completed in last 60 seconds
+            # - Uses total time (created_at to completed_at)
+            # - Matches the requirement exactly
             
             # Get active users
             if 'active_users' in metrics:
@@ -204,7 +220,11 @@ async def get_dashboard_metrics(request: Request):
             },
             'job_latency': {
                 'average_seconds': avg_latency,
-                'average_minutes': avg_latency / 60.0
+                'average_minutes': avg_latency / 60.0,
+                'by_tenant': {tenant_id: {
+                    'average_seconds': latency,
+                    'average_minutes': latency / 60.0
+                } for tenant_id, latency in avg_latency_by_tenant.items()}
             },
             'active_users': {
                 'count': active_users_count,

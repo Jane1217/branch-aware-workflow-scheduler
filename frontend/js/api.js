@@ -38,8 +38,15 @@ export async function createWorkflow(workflowData) {
     });
     
     if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.detail || 'Failed to create workflow');
+        let errorMessage = 'Failed to create workflow';
+        try {
+            const error = await response.json();
+            errorMessage = error.detail || errorMessage;
+        } catch (e) {
+            // If response is not JSON, use status text
+            errorMessage = response.statusText || errorMessage;
+        }
+        throw new Error(errorMessage);
     }
     
     return await response.json();
@@ -108,19 +115,51 @@ export async function fetchVisualizationData(jobId) {
 
 export async function fetchMonitoringData() {
     const baseUrl = API_BASE.replace('/api', '');
-    const [healthResponse, metricsResponse] = await Promise.all([
-        fetch(`${baseUrl}/health`),
-        fetch(`${API_BASE}/metrics/dashboard`)
-    ]);
+    const healthUrl = `${baseUrl}/health`;
+    const metricsUrl = `${API_BASE}/metrics/dashboard`;
     
-    const healthData = healthResponse.ok ? await healthResponse.json() : null;
-    const metricsData = metricsResponse.ok ? await metricsResponse.json() : null;
-    
-    return {
-        health: healthData,
-        metrics: metricsData,
-        healthError: !healthResponse.ok,
-        metricsError: !metricsResponse.ok
-    };
+    try {
+        const [healthResponse, metricsResponse] = await Promise.all([
+            fetch(healthUrl).catch(() => {
+                return { ok: false, status: 0 };
+            }),
+            fetch(metricsUrl).catch(() => {
+                return { ok: false, status: 0 };
+            })
+        ]);
+        
+        let healthData = null;
+        let metricsData = null;
+        
+        if (healthResponse.ok) {
+            try {
+                healthData = await healthResponse.json();
+            } catch (e) {
+                // Ignore parsing errors
+            }
+        }
+        
+        if (metricsResponse.ok) {
+            try {
+                metricsData = await metricsResponse.json();
+            } catch (e) {
+                // Ignore parsing errors
+            }
+        }
+        
+        return {
+            health: healthData,
+            metrics: metricsData,
+            healthError: !healthResponse.ok,
+            metricsError: !metricsResponse.ok
+        };
+    } catch (error) {
+        return {
+            health: null,
+            metrics: null,
+            healthError: true,
+            metricsError: true
+        };
+    }
 }
 

@@ -79,4 +79,11 @@ Thumbs.db
 .pytest_cache/
 .coverage
 htmlcov/
+test_requirements.py
+test_error_display.html
+TEST_REPORT.md
+DEPENDENCY_LOGIC_EXPLANATION.md
+ERROR_HANDLING_IMPROVEMENTS.md
+LATENCY_CALCULATION_EXPLANATION.md
+grafana-dashboard.json
 
