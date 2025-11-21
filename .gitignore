@@ -45,7 +45,8 @@ tailadmin-free-tailwind-dashboard-template-main/
 
 # Node.js
 node_modules/
-# Note: package-lock.json should be tracked for dependency version consistency
+package.json
+package-lock.json
 
 # Data files
 *.svs
@@ -88,4 +89,7 @@ TEST_REPORT.md
 DEPENDENCY_LOGIC_EXPLANATION.md
 ERROR_HANDLING_IMPROVEMENTS.md
 LATENCY_CALCULATION_EXPLANATION.md
+
+# Docker setup verification (optional tool)
+verify-docker-setup.sh
 

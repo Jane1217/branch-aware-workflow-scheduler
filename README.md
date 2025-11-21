@@ -86,7 +86,6 @@ Or download: [demo.mp4](demo.mp4)
 ├── Dockerfile                  # Backend Docker image
 ├── requirements.txt            # Python dependencies
 ├── prometheus.yml              # Prometheus configuration
-├── verify-docker-setup.sh      # Docker setup verification script
 └── README.md
 
 ```
@@ -96,7 +95,6 @@ Or download: [demo.mp4](demo.mp4)
 ### Prerequisites
 
 - **Python** 3.11+ (with pip)
-- **Node.js** 18+ (for frontend CSS build)
 - **Git** (for cloning InstanSeg)
 - **NVIDIA GPU** (recommended for InstanSeg acceleration, but not required)
 
@@ -136,14 +134,9 @@ pip install git+https://github.com/instanseg/instanseg.git
 
 If installation fails due to missing dependencies (e.g., `slideio`), the system will still run but cell segmentation features will be unavailable.
 
-#### 5. Build Frontend CSS (Required for UI)
+**Note**: The frontend CSS is already built and included in the repository. If you need to rebuild it, you'll need Node.js 18+ and can run `npm install && npm run build:css` (requires `package.json`, which is not included in the repository).
 
-```bash
-npm install
-npm run build:css
-```
-
-#### 6. Run the Application
+#### 5. Run the Application
 
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -196,11 +189,6 @@ This starts:
 - **API Documentation**: http://localhost:8000/docs
 - **Prometheus**: http://localhost:9090
 - **Grafana**: http://localhost:3000 (username: `admin`, password: `admin`)
-
-Optional: Verify configuration before starting:
-```bash
-./verify-docker-setup.sh
-```
 
 ## API Documentation
 
