@@ -65,7 +65,13 @@ async def get_dashboard_metrics(request: Request):
         metrics_text = get_metrics()
         metrics = parse_prometheus_metrics(metrics_text)
         
-        # Get scheduler state from request
+        # Get scheduler state from request (with error handling)
+        if not hasattr(request.app.state, 'scheduler') or request.app.state.scheduler is None:
+            return JSONResponse(
+                status_code=503,
+                content={'error': 'Scheduler not initialized yet'}
+            )
+        
         scheduler = request.app.state.scheduler
         user_limit_manager = request.app.state.user_limit_manager
         
@@ -133,9 +139,20 @@ async def get_dashboard_metrics(request: Request):
                 'queue_depth': scheduler.get_queue_depth()
             }
         })
+    except AttributeError as e:
+        # Handle case where app.state is not initialized
+        return JSONResponse(
+            status_code=503,
+            content={'error': f'Service not ready: {str(e)}'}
+        )
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         return JSONResponse(
             status_code=500,
-            content={'error': f'Failed to get metrics: {str(e)}'}
+            content={
+                'error': f'Failed to get metrics: {str(e)}',
+                'details': error_details
+            }
         )
 
