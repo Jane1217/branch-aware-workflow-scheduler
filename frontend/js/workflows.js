@@ -49,9 +49,9 @@ export async function loadWorkflows() {
         // Manage auto-refresh based on running jobs
         if (hasRunningJob) {
             // If there are running jobs, ensure auto-refresh is active
-            if (!isAutoRefreshActive()) {
-                startAutoRefresh();
-            }
+                    if (!isAutoRefreshActive()) {
+                        startAutoRefresh();
+                }
         } else {
             // If no running jobs, stop auto-refresh
             if (isAutoRefreshActive()) {

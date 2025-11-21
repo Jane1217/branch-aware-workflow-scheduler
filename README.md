@@ -2,6 +2,12 @@
 
 A high-performance workflow scheduler for large-image inference tasks with branch-aware execution, multi-tenant isolation, and real-time progress tracking. This system is designed to handle large-scale Whole Slide Image (WSI) processing using InstanSeg for cell segmentation and tissue mask generation.
 
+## Demo
+
+[![Demo Video](demo.mov)](demo.mov)
+
+Watch the demo video to see the system in action: [demo.mov](demo.mov)
+
 ## Features
 
 - **Branch-Aware Scheduling**: Serial execution within branches, parallel execution across branches

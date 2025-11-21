@@ -1,9 +1,12 @@
 FROM python:3.11-slim
 
-# Install system dependencies for OpenSlide and curl (for health checks)
+# Install system dependencies for OpenSlide, GDAL (for rasterio), and curl (for health checks)
 RUN apt-get update && apt-get install -y \
     openslide-tools \
     libopenslide-dev \
+    gdal-bin \
+    libgdal-dev \
+    g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
@@ -12,6 +15,11 @@ WORKDIR /app
 
 # Copy requirements
 COPY requirements.txt .
+
+# Set GDAL environment variables for rasterio
+ENV GDAL_CONFIG=/usr/bin/gdal-config
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt

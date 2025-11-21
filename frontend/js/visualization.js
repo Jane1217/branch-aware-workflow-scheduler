@@ -43,20 +43,20 @@ export async function loadVisualizationJobList() {
                         }
                     }
                     
-                    if (jobStatus === 'SUCCEEDED') {
+                if (jobStatus === 'SUCCEEDED') {
                         succeededJobs++;
-                    }
-                    
-                    if (jobStatus === 'SUCCEEDED' && jobType === 'cell_segmentation') {
+                }
+                
+                if (jobStatus === 'SUCCEEDED' && jobType === 'cell_segmentation') {
                         foundJobs++;
-                        const option = document.createElement('option');
-                        option.value = job.job_id;
-                        const jobIdDisplay = job.job_id.includes('_') ? job.job_id.split('_').pop() : job.job_id;
-                        const imageName = job.image_path ? job.image_path.split('/').pop() : 'unknown';
-                        option.textContent = `${jobIdDisplay} - ${imageName}`;
-                        select.appendChild(option);
-                    }
-                });
+                    const option = document.createElement('option');
+                    option.value = job.job_id;
+                    const jobIdDisplay = job.job_id.includes('_') ? job.job_id.split('_').pop() : job.job_id;
+                    const imageName = job.image_path ? job.image_path.split('/').pop() : 'unknown';
+                    option.textContent = `${jobIdDisplay} - ${imageName}`;
+                    select.appendChild(option);
+                }
+            });
             }
         });
         
@@ -64,7 +64,7 @@ export async function loadVisualizationJobList() {
             if (succeededJobs > 0) {
                 select.innerHTML = `<option value="">Found ${succeededJobs} succeeded job(s), but none are cell_segmentation type</option>`;
             } else {
-                select.innerHTML = '<option value="">No completed cell_segmentation jobs found</option>';
+            select.innerHTML = '<option value="">No completed cell_segmentation jobs found</option>';
             }
         }
     } catch (error) {

@@ -35,10 +35,10 @@ export async function loadMonitoringData() {
         const retry = () => {
             attempts++;
             if (attempts < maxAttempts) {
-                setTimeout(() => {
+        setTimeout(() => {
                     const content = document.getElementById('monitoringContent');
                     if (content) {
-                        loadMonitoringData();
+            loadMonitoringData();
                     } else {
                         retry();
                     }
@@ -239,9 +239,9 @@ export function displayMonitoringData(data) {
         </div>
     `;
     
-        // Initialize charts immediately after HTML is inserted
+    // Initialize charts immediately after HTML is inserted
         // Use setTimeout to ensure DOM is ready and Chart.js is loaded
-        setTimeout(() => {
+    setTimeout(() => {
             // Try to initialize charts, with retry if Chart.js not loaded
             let attempts = 0;
             const maxAttempts = 20;
@@ -253,13 +253,13 @@ export function displayMonitoringData(data) {
                     if (chartsInitialized) {
                         // Charts initialized successfully, now update with data
                         if (data.job_latency || data.queue_depth || data.active_workers) {
-                            updateDashboardCharts(data);
-                        } else {
-                            // Initialize empty charts
-                            updateLatencyChart();
+            updateDashboardCharts(data);
+        } else {
+            // Initialize empty charts
+            updateLatencyChart();
                             updateWorkersChart();
-                            updateQueueChart();
-                        }
+            updateQueueChart();
+        }
                     } else if (attempts < maxAttempts) {
                         // Retry if charts not initialized yet
                         setTimeout(tryInit, 100);
@@ -272,7 +272,7 @@ export function displayMonitoringData(data) {
             
             tryInit();
         }, 300);
-}
+    }
 
 
 export function updateDashboardCharts(data) {
@@ -542,7 +542,7 @@ export function updateWorkersChart() {
     if (workersData.length === 0) {
         workersChart.data.labels = ['No data'];
         workersChart.data.datasets[0].data = [0];
-    } else {
+        } else {
         workersChart.data.labels = workersData.map(d => d.time);
         workersChart.data.datasets[0].data = workersData.map(d => d.value);
     }

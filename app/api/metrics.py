@@ -137,7 +137,7 @@ async def get_dashboard_metrics(request: Request):
                                 duration = (job.completed_at - job.created_at).total_seconds()
                                 if duration > 0:
                                     latencies.append(duration)
-                                    
+                
                                     # Also group by tenant_id for per-tenant calculation
                                     tenant_id = job.tenant_id
                                     if tenant_id not in latencies_by_tenant:

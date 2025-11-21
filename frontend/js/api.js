@@ -40,7 +40,7 @@ export async function createWorkflow(workflowData) {
     if (!response.ok) {
         let errorMessage = 'Failed to create workflow';
         try {
-            const error = await response.json();
+        const error = await response.json();
             errorMessage = error.detail || errorMessage;
         } catch (e) {
             // If response is not JSON, use status text
@@ -119,15 +119,15 @@ export async function fetchMonitoringData() {
     const metricsUrl = `${API_BASE}/metrics/dashboard`;
     
     try {
-        const [healthResponse, metricsResponse] = await Promise.all([
+    const [healthResponse, metricsResponse] = await Promise.all([
             fetch(healthUrl).catch(() => {
                 return { ok: false, status: 0 };
             }),
             fetch(metricsUrl).catch(() => {
                 return { ok: false, status: 0 };
             })
-        ]);
-        
+    ]);
+    
         let healthData = null;
         let metricsData = null;
         
@@ -146,13 +146,13 @@ export async function fetchMonitoringData() {
                 // Ignore parsing errors
             }
         }
-        
-        return {
-            health: healthData,
-            metrics: metricsData,
-            healthError: !healthResponse.ok,
-            metricsError: !metricsResponse.ok
-        };
+    
+    return {
+        health: healthData,
+        metrics: metricsData,
+        healthError: !healthResponse.ok,
+        metricsError: !metricsResponse.ok
+    };
     } catch (error) {
         return {
             health: null,
