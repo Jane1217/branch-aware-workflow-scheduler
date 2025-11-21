@@ -41,6 +41,11 @@ ENV/
 UPenn_TissueLab_Hiring.md
 UPenn_TissueLab_Hiring.pdf
 TissueLab-main/
+tailadmin-free-tailwind-dashboard-template-main/
+
+# Node.js
+node_modules/
+# Note: package-lock.json should be tracked for dependency version consistency
 
 # Data files
 *.svs

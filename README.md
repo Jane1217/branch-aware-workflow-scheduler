@@ -47,10 +47,18 @@ A high-performance workflow scheduler for large-image inference tasks with branc
 │   └── websocket/              # WebSocket handlers
 │       ├── __init__.py
 │       └── progress.py         # Real-time progress updates
-├── frontend/                   # Simple web UI
-│   ├── index.html
-│   ├── styles.css
-│   └── app.js
+├── frontend/                   # Web UI (TailAdmin-based)
+│   ├── index.html              # Main HTML file
+│   ├── js/                     # Modular JavaScript
+│   │   ├── app.js              # Main entry point
+│   │   ├── config.js           # Configuration
+│   │   ├── api.js              # API calls
+│   │   ├── workflows.js        # Workflow management
+│   │   ├── visualization.js    # Visualization features
+│   │   ├── monitoring.js       # Monitoring dashboard
+│   │   └── ...                 # Other modules
+│   ├── tailadmin-css/          # TailAdmin CSS
+│   └── tailadmin-images/       # TailAdmin images
 ├── tests/                      # Test files
 ├── docker-compose.yml          # Docker deployment
 ├── Dockerfile                  # Backend Docker image
@@ -69,7 +77,7 @@ python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
 
-2. Install dependencies:
+2. Install Python dependencies:
 ```bash
 pip install -r requirements.txt
 ```
@@ -79,14 +87,24 @@ pip install -r requirements.txt
 pip install git+https://github.com/instanseg/instanseg.git
 ```
 
-4. Run the application:
+4. Build TailAdmin CSS (required for frontend):
+```bash
+npm install
+npm run build:css
+```
+
+5. Run the application:
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-5. Access the API documentation:
-- Swagger UI: http://localhost:8000/docs
-- ReDoc: http://localhost:8000/redoc
+6. Access the application:
+- **Frontend UI**: http://localhost:8000/ (or http://0.0.0.0:8000/)
+- **API Documentation**: 
+  - Swagger UI: http://localhost:8000/docs
+  - ReDoc: http://localhost:8000/redoc
+- **Health Check**: http://localhost:8000/health
+- **Metrics**: http://localhost:8000/metrics
 
 ### Docker Deployment
 

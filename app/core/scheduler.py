@@ -1,6 +1,7 @@
 """
 Branch-aware scheduler
-Enforces serial execution within branches, parallel across branches
+Enforces serial execution within tenant+branch combinations, parallel across different tenant+branch pairs
+Ensures complete multi-tenant isolation: different users with same branch name don't interfere
 """
 import asyncio
 import time
@@ -24,10 +25,11 @@ from app.utils.metrics import (
 class BranchAwareScheduler:
     """
     Branch-aware scheduler that:
-    - Executes jobs serially within the same branch (FIFO)
-    - Executes jobs in parallel across different branches
+    - Executes jobs serially within the same tenant+branch (FIFO)
+    - Executes jobs in parallel across different tenant+branch combinations
     - Respects global MAX_WORKERS limit
     - Integrates with user limit management
+    - Ensures complete multi-tenant isolation (different users with same branch name don't interfere)
     """
     
     def __init__(
@@ -40,7 +42,9 @@ class BranchAwareScheduler:
         self.tenant_manager = tenant_manager
         self.workflow_engine = workflow_engine  # Reference to workflow engine for status updates
         
-        # Branch queues: branch_id -> deque of jobs
+        # Branch queues: tenant_id:branch_id -> deque of jobs
+        # Using tenant_id:branch_id as key ensures multi-tenant isolation
+        # Different users with same branch name won't interfere with each other
         self.branch_queues: Dict[str, Deque[Job]] = defaultdict(deque)
         
         # Currently running jobs: job_id -> Job
@@ -49,7 +53,7 @@ class BranchAwareScheduler:
         # Cancelled jobs: job_id -> True (jobs cancelled while in queue)
         self.cancelled_jobs: Set[str] = set()
         
-        # Branch locks: branch_id -> asyncio.Lock (ensures serial execution per branch)
+        # Branch locks: tenant_id:branch_id -> asyncio.Lock (ensures serial execution per tenant+branch)
         self.branch_locks: Dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
         
         # Global worker semaphore (limits total concurrent jobs)
@@ -104,8 +108,10 @@ class BranchAwareScheduler:
             # Store executor callback
             self.job_executors[job.job_id] = execute_callback
             
-            # Add to branch queue
-            self.branch_queues[job.branch].append(job)
+            # Add to branch queue with tenant-aware key
+            # Format: "tenant_id:branch" ensures complete multi-tenant isolation
+            queue_key = f"{job.tenant_id}:{job.branch}"
+            self.branch_queues[queue_key].append(job)
             self.tenant_manager.add_job(job.tenant_id, job.job_id)
             
             # Start scheduler if not running
@@ -129,20 +135,28 @@ class BranchAwareScheduler:
     
     async def _process_queues(self):
         """Process jobs from branch queues"""
-        # Get branches that have running jobs
-        branches_with_running_jobs = {job.branch for job in self.running_jobs.values()}
+        # Get tenant-aware queue keys that have running jobs
+        # Extract tenant_id:branch from running jobs
+        queues_with_running_jobs = {f"{job.tenant_id}:{job.branch}" for job in self.running_jobs.values()}
         
-        # Get all branches with pending jobs that don't have running jobs
-        branches_with_jobs = [
-            branch for branch, queue in self.branch_queues.items()
-            if queue and branch not in branches_with_running_jobs
+        # Get all tenant-aware queues with pending jobs that don't have running jobs
+        queues_with_jobs = [
+            queue_key for queue_key, queue in self.branch_queues.items()
+            if queue and queue_key not in queues_with_running_jobs
         ]
         
         # Update queue depth metrics
-        for branch, queue in self.branch_queues.items():
-            # Get tenant_id from first job in queue (if any)
-            tenant_id = queue[0].tenant_id if queue else "unknown"
-            update_queue_depth(tenant_id, branch, len(queue))
+        for queue_key, queue in self.branch_queues.items():
+            if queue:
+                # Parse tenant_id and branch from queue_key (format: "tenant_id:branch")
+                parts = queue_key.split(':', 1)
+                if len(parts) == 2:
+                    tenant_id, branch = parts
+                else:
+                    # Fallback for old format (shouldn't happen, but handle gracefully)
+                    tenant_id = queue[0].tenant_id if queue else "unknown"
+                    branch = queue_key
+                update_queue_depth(tenant_id, branch, len(queue))
         
         # Update active workers metric
         update_worker_active_jobs(len(self.running_jobs))
@@ -151,11 +165,11 @@ class BranchAwareScheduler:
         active_count = await self.user_limit_manager.get_active_count()
         update_active_users(active_count)
         
-        for branch in branches_with_jobs:
+        for queue_key in queues_with_jobs:
             if len(self.running_jobs) >= settings.MAX_WORKERS:
                 break  # Reached global limit
             
-            queue = self.branch_queues[branch]
+            queue = self.branch_queues[queue_key]
             if not queue:
                 continue
             
@@ -197,6 +211,8 @@ class BranchAwareScheduler:
                 job.started_at = datetime.now()
                 
                 # Update metrics
+                # Parse branch from queue_key for metrics
+                branch = queue_key.split(':', 1)[1] if ':' in queue_key else job.branch
                 update_worker_active_jobs(len(self.running_jobs), job.tenant_id)
                 update_queue_depth(job.tenant_id, branch, len(queue))
                 
@@ -339,11 +355,28 @@ class BranchAwareScheduler:
                         # This will be handled by workflow engine checking slot status
                         pass
     
-    def get_queue_depth(self, branch: Optional[str] = None) -> int:
-        """Get queue depth for a branch or total"""
-        if branch:
-            return len(self.branch_queues.get(branch, deque()))
-        return sum(len(queue) for queue in self.branch_queues.values())
+    def get_queue_depth(self, branch: Optional[str] = None, tenant_id: Optional[str] = None) -> int:
+        """
+        Get queue depth for a branch or total
+        If both branch and tenant_id are provided, returns depth for that specific tenant+branch
+        If only branch is provided, returns total depth across all tenants for that branch
+        If neither is provided, returns total depth across all queues
+        """
+        if branch and tenant_id:
+            # Get depth for specific tenant+branch
+            queue_key = f"{tenant_id}:{branch}"
+            return len(self.branch_queues.get(queue_key, deque()))
+        elif branch:
+            # Get total depth across all tenants for this branch
+            total = 0
+            for queue_key, queue in self.branch_queues.items():
+                # Check if queue_key ends with the branch name
+                if queue_key.endswith(f":{branch}") or queue_key == branch:
+                    total += len(queue)
+            return total
+        else:
+            # Return total depth across all queues
+            return sum(len(queue) for queue in self.branch_queues.values())
     
     def get_running_jobs_count(self) -> int:
         """Get number of currently running jobs"""

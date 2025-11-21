@@ -72,18 +72,40 @@ async def get_dashboard_metrics(request: Request):
         active_workers_global = scheduler.get_running_jobs_count()
         active_workers_by_tenant = {}
         
-        # Get queue depth by branch directly from scheduler
+        # Per-Branch Queue Depth Calculation
+        # Formula: Queue Depth(U, B) = count of PENDING jobs where tenant_id=U and branch=B
+        # 
+        # Key Points:
+        # 1. Each (tenant_id, branch) combination is an independent serial execution channel
+        # 2. Only PENDING jobs in branch_queues are counted (RUNNING jobs are removed)
+        # 3. Jobs from different workflows but same tenant_id:branch are counted together
+        # 4. Different users' queues for the same branch name are NOT summed (they're independent)
+        #
+        # Example:
+        # - User A:branch-A has 3 PENDING jobs (from Workflow X, Y, Z) -> depth = 3
+        # - User B:branch-A has 5 PENDING jobs (from Workflow M, N) -> depth = 5
+        # - These are two independent channels, displayed separately
         queue_depth_by_branch = {}
         try:
             # Access branch_queues attribute directly (it's a public attribute)
-            for branch, queue in scheduler.branch_queues.items():
+            # Queue keys are in format "tenant_id:branch"
+            for queue_key, queue in scheduler.branch_queues.items():
                 if queue:
-                    # Group by tenant_id within branch
-                    branch_data = {}
-                    for job in queue:
-                        tenant_id = job.tenant_id
-                        branch_data[tenant_id] = branch_data.get(tenant_id, 0) + 1
-                    queue_depth_by_branch[branch] = branch_data
+                    # Parse tenant_id and branch from queue_key (format: "tenant_id:branch")
+                    parts = queue_key.split(':', 1)
+                    if len(parts) == 2:
+                        tenant_id, branch = parts
+                    else:
+                        # Fallback for old format (shouldn't happen)
+                        tenant_id = queue[0].tenant_id if queue else "unknown"
+                        branch = queue_key
+                    
+                    # All jobs in branch_queues are PENDING by definition
+                    # Count = len(queue) for this tenant_id:branch combination
+                    # Group by branch, then by tenant_id for frontend display
+                    if branch not in queue_depth_by_branch:
+                        queue_depth_by_branch[branch] = {}
+                    queue_depth_by_branch[branch][tenant_id] = len(queue)
         except Exception:
             # If we can't access branch_queues, leave it empty
             pass
@@ -91,17 +113,27 @@ async def get_dashboard_metrics(request: Request):
         avg_latency = 0.0
         active_users_count = 0
         
-        # Calculate average latency from workflow engine (completed jobs)
+        # Calculate average latency from workflow engine (completed jobs in last 60 seconds)
+        # Formula: Job Latency = completed_at - created_at (for jobs completed in last 60 seconds)
         try:
+            from datetime import datetime, timedelta
             workflow_engine = request.app.state.workflow_engine
             if workflow_engine:
+                now = datetime.now()
+                cutoff_time = now - timedelta(seconds=60)  # Last 60 seconds
                 latencies = []
+                
                 for workflow in workflow_engine.workflows.values():
                     for job in workflow.jobs:
-                        if job.status.value in ['SUCCEEDED', 'FAILED'] and job.started_at and job.completed_at:
-                            duration = (job.completed_at - job.started_at).total_seconds()
-                            if duration > 0:
-                                latencies.append(duration)
+                        # Check if job is completed (SUCCEEDED or FAILED)
+                        job_status = job.status.value if hasattr(job.status, 'value') else str(job.status)
+                        if job_status in ['SUCCEEDED', 'FAILED'] and job.created_at and job.completed_at:
+                            # Only include jobs completed in the last 60 seconds
+                            if job.completed_at >= cutoff_time:
+                                # Calculate latency: completed_at - created_at
+                                duration = (job.completed_at - job.created_at).total_seconds()
+                                if duration > 0:
+                                    latencies.append(duration)
                 
                 if latencies:
                     avg_latency = sum(latencies) / len(latencies)
