@@ -1105,30 +1105,40 @@ function updateDashboardCharts(data) {
     // Update latency chart
     if (data.job_latency) {
         const latencyMinutes = data.job_latency.average_minutes || 0;
-        latencyData.push({
-            time: timestamp,
-            value: latencyMinutes
-        });
-        
-        // Keep only last 20 data points
-        if (latencyData.length > 20) {
-            latencyData.shift();
+        // Only add data point if latency is greater than 0 or we have no data yet
+        if (latencyMinutes > 0 || latencyData.length === 0) {
+            latencyData.push({
+                time: timestamp,
+                value: latencyMinutes
+            });
+            
+            // Keep only last 20 data points
+            if (latencyData.length > 20) {
+                latencyData.shift();
+            }
+            
+            updateLatencyChart();
         }
-        
-        updateLatencyChart();
     }
     
     // Update queue depth chart
     if (data.queue_depth && data.queue_depth.by_branch) {
         queueData = [];
-        Object.keys(data.queue_depth.by_branch).forEach(branch => {
-            const branchData = data.queue_depth.by_branch[branch];
-            const totalDepth = Object.values(branchData).reduce((sum, val) => sum + val, 0);
-            queueData.push({
-                branch: branch,
-                depth: totalDepth
+        const branches = Object.keys(data.queue_depth.by_branch);
+        
+        if (branches.length > 0) {
+            branches.forEach(branch => {
+                const branchData = data.queue_depth.by_branch[branch];
+                const totalDepth = Object.values(branchData).reduce((sum, val) => sum + val, 0);
+                // Only include branches with depth > 0
+                if (totalDepth > 0) {
+                    queueData.push({
+                        branch: branch,
+                        depth: totalDepth
+                    });
+                }
             });
-        });
+        }
         
         updateQueueChart();
     }

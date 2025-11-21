@@ -68,12 +68,45 @@ async def get_dashboard_metrics(request: Request):
         
         scheduler = request.app.state.scheduler
         
-        # Initialize default values
+        # Initialize default values from scheduler state directly
         active_workers_global = scheduler.get_running_jobs_count()
         active_workers_by_tenant = {}
+        
+        # Get queue depth by branch directly from scheduler
         queue_depth_by_branch = {}
+        try:
+            # Access branch_queues attribute directly (it's a public attribute)
+            for branch, queue in scheduler.branch_queues.items():
+                if queue:
+                    # Group by tenant_id within branch
+                    branch_data = {}
+                    for job in queue:
+                        tenant_id = job.tenant_id
+                        branch_data[tenant_id] = branch_data.get(tenant_id, 0) + 1
+                    queue_depth_by_branch[branch] = branch_data
+        except Exception:
+            # If we can't access branch_queues, leave it empty
+            pass
+        
         avg_latency = 0.0
         active_users_count = 0
+        
+        # Calculate average latency from workflow engine (completed jobs)
+        try:
+            workflow_engine = request.app.state.workflow_engine
+            if workflow_engine:
+                latencies = []
+                for workflow in workflow_engine.workflows.values():
+                    for job in workflow.jobs:
+                        if job.status.value in ['SUCCEEDED', 'FAILED'] and job.started_at and job.completed_at:
+                            duration = (job.completed_at - job.started_at).total_seconds()
+                            if duration > 0:
+                                latencies.append(duration)
+                
+                if latencies:
+                    avg_latency = sum(latencies) / len(latencies)
+        except Exception:
+            pass
         
         try:
             from app.utils.metrics import get_metrics
@@ -91,8 +124,9 @@ async def get_dashboard_metrics(request: Request):
                     else:
                         active_workers_by_tenant[tenant_id] = int(item['value'])
             
-            # Extract queue depth by branch
+            # Override queue depth from metrics if available (more accurate)
             if 'queue_depth' in metrics:
+                queue_depth_by_branch = {}
                 for item in metrics['queue_depth']:
                     branch = item['labels'].get('branch_name', 'unknown')
                     tenant_id = item['labels'].get('tenant_id', 'unknown')
@@ -101,8 +135,7 @@ async def get_dashboard_metrics(request: Request):
                         queue_depth_by_branch[branch] = {}
                     queue_depth_by_branch[branch][tenant_id] = depth
             
-            # Calculate average job latency
-            # Note: Prometheus Histogram stores _sum and _count, we calculate average from them
+            # Override latency from Prometheus metrics if available (more accurate)
             latency_sum_key = 'job_latency_seconds_sum'
             latency_count_key = 'job_latency_seconds_count'
             
