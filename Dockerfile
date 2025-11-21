@@ -7,7 +7,6 @@ RUN apt-get update && apt-get install -y \
     gdal-bin \
     libgdal-dev \
     libtiff-dev \
-    libtiff5 \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
