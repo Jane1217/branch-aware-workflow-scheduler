@@ -1019,15 +1019,29 @@ function resetVisualizationView() {
 }
 
 // Monitoring functions
+let latencyChart = null;
+let queueChart = null;
+let latencyData = [];
+let queueData = [];
+
 async function loadMonitoringData() {
     try {
-        const response = await fetch('http://localhost:8000/health');
+        // Load both health and dashboard metrics
+        const [healthResponse, metricsResponse] = await Promise.all([
+            fetch('http://localhost:8000/health'),
+            fetch('http://localhost:8000/api/metrics/dashboard')
+        ]);
         
-        if (response.ok) {
-            const data = await response.json();
-            displayMonitoringData(data);
+        if (healthResponse.ok) {
+            const healthData = await healthResponse.json();
+            displayMonitoringData(healthData);
+        }
+        
+        if (metricsResponse.ok) {
+            const metricsData = await metricsResponse.json();
+            updateDashboardCharts(metricsData);
         } else {
-            showNotification('Failed to load monitoring data', 'error');
+            showNotification('Failed to load dashboard metrics', 'error');
         }
     } catch (error) {
         showNotification('Failed to load monitoring data', 'error');
@@ -1088,6 +1102,177 @@ function stopAutoMonitoring() {
         autoMonitoringInterval = null;
         showNotification('Auto-monitoring stopped', 'info');
     }
+}
+
+function updateDashboardCharts(data) {
+    const now = new Date();
+    const timestamp = now.toLocaleTimeString();
+    
+    // Update latency chart
+    if (data.job_latency) {
+        const latencyMinutes = data.job_latency.average_minutes || 0;
+        latencyData.push({
+            time: timestamp,
+            value: latencyMinutes
+        });
+        
+        // Keep only last 20 data points
+        if (latencyData.length > 20) {
+            latencyData.shift();
+        }
+        
+        updateLatencyChart();
+    }
+    
+    // Update queue depth chart
+    if (data.queue_depth && data.queue_depth.by_branch) {
+        queueData = [];
+        Object.keys(data.queue_depth.by_branch).forEach(branch => {
+            const branchData = data.queue_depth.by_branch[branch];
+            const totalDepth = Object.values(branchData).reduce((sum, val) => sum + val, 0);
+            queueData.push({
+                branch: branch,
+                depth: totalDepth
+            });
+        });
+        
+        updateQueueChart();
+    }
+}
+
+function updateLatencyChart() {
+    const canvas = document.getElementById('latencyChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    ctx.clearRect(0, 0, width, height);
+    
+    if (latencyData.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No data yet', width / 2, height / 2);
+        return;
+    }
+    
+    // Find max value for scaling
+    const maxValue = Math.max(...latencyData.map(d => d.value), 1);
+    const padding = 40;
+    const chartWidth = width - padding * 2;
+    const chartHeight = height - padding * 2;
+    
+    // Draw axes
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    ctx.stroke();
+    
+    // Draw grid lines
+    ctx.strokeStyle = '#eee';
+    for (let i = 0; i <= 5; i++) {
+        const y = padding + (chartHeight / 5) * i;
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(width - padding, y);
+        ctx.stroke();
+    }
+    
+    // Draw line
+    ctx.strokeStyle = '#667eea';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    
+    latencyData.forEach((point, index) => {
+        const x = padding + (chartWidth / (latencyData.length - 1 || 1)) * index;
+        const y = height - padding - (point.value / maxValue) * chartHeight;
+        
+        if (index === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    });
+    ctx.stroke();
+    
+    // Draw points
+    ctx.fillStyle = '#667eea';
+    latencyData.forEach((point, index) => {
+        const x = padding + (chartWidth / (latencyData.length - 1 || 1)) * index;
+        const y = height - padding - (point.value / maxValue) * chartHeight;
+        ctx.beginPath();
+        ctx.arc(x, y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+    });
+    
+    // Draw labels
+    ctx.fillStyle = '#666';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('0', padding - 5, height - padding);
+    ctx.fillText(maxValue.toFixed(1), padding - 5, padding + 5);
+    ctx.fillText('min', padding - 5, padding / 2);
+}
+
+function updateQueueChart() {
+    const canvas = document.getElementById('queueChart');
+    if (!canvas) return;
+    
+    const ctx = canvas.getContext('2d');
+    const width = canvas.width;
+    const height = canvas.height;
+    
+    ctx.clearRect(0, 0, width, height);
+    
+    if (queueData.length === 0) {
+        ctx.fillStyle = '#999';
+        ctx.font = '14px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('No queue data yet', width / 2, height / 2);
+        return;
+    }
+    
+    const maxDepth = Math.max(...queueData.map(d => d.depth), 1);
+    const barWidth = (width - 60) / queueData.length;
+    const padding = 40;
+    
+    // Draw axes
+    ctx.strokeStyle = '#ccc';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(padding, padding);
+    ctx.lineTo(padding, height - padding);
+    ctx.lineTo(width - padding, height - padding);
+    ctx.stroke();
+    
+    // Draw bars
+    queueData.forEach((item, index) => {
+        const barHeight = (item.depth / maxDepth) * (height - padding * 2);
+        const x = padding + index * barWidth + 5;
+        const y = height - padding - barHeight;
+        
+        // Bar
+        ctx.fillStyle = `hsl(${(index * 60) % 360}, 70%, 50%)`;
+        ctx.fillRect(x, y, barWidth - 10, barHeight);
+        
+        // Label
+        ctx.fillStyle = '#666';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(item.branch, x + barWidth / 2 - 5, height - padding + 15);
+        ctx.fillText(item.depth.toString(), x + barWidth / 2 - 5, y - 5);
+    });
+    
+    // Y-axis label
+    ctx.fillStyle = '#666';
+    ctx.font = '10px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.fillText('Depth', padding - 5, padding / 2);
 }
 
 function escapeHtml(text) {

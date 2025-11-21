@@ -145,6 +145,10 @@ app.include_router(progress.router, prefix="/api/progress", tags=["progress"])
 from app.api import visualization
 app.include_router(visualization.router, prefix="/api/visualization", tags=["visualization"])
 
+# Metrics API
+from app.api import metrics
+app.include_router(metrics.router, prefix="/api/metrics", tags=["metrics"])
+
 # Mount static files for frontend
 try:
     app.mount("/static", StaticFiles(directory="frontend"), name="static")

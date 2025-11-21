@@ -161,6 +161,18 @@
                         </div>
                     </div>
                 </div>
+                
+                <!-- Dashboard Charts -->
+                <div class="dashboard-charts">
+                    <div class="chart-card">
+                        <h3>Average Job Latency (per minute)</h3>
+                        <canvas id="latencyChart" width="400" height="200"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Per-Branch Queue Depth</h3>
+                        <canvas id="queueChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
                 <div class="monitoring-actions">
                     <button type="button" class="btn-secondary" onclick="loadMonitoringData()">
                         🔄 Refresh Metrics
@@ -172,14 +184,12 @@
                         ⏸️ Stop Auto-Refresh
                     </button>
                 </div>
-                <div class="grafana-info">
-                    <h3>📊 Advanced Monitoring</h3>
-                    <p>For comprehensive monitoring with Grafana dashboards:</p>
+                <div class="metrics-info">
+                    <h3>📊 Metrics Information</h3>
+                    <p>All metrics are displayed in real-time above. For advanced monitoring with Grafana (optional):</p>
                     <ul>
-                        <li>Access Grafana at <a href="http://localhost:3000" target="_blank">http://localhost:3000</a></li>
-                        <li>Default credentials: admin / admin</li>
-                        <li>Import the dashboard from <code>grafana-dashboard.json</code></li>
                         <li>Prometheus metrics available at <a href="http://localhost:8000/metrics" target="_blank">http://localhost:8000/metrics</a></li>
+                        <li>Optional: Access Grafana at <a href="http://localhost:3000" target="_blank">http://localhost:3000</a> (if running via docker-compose)</li>
                     </ul>
                 </div>
             </section>

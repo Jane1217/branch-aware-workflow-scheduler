@@ -931,7 +931,39 @@ button:disabled {
     flex-wrap: wrap;
 }
 
-.grafana-info {
+.dashboard-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 20px;
+    margin-top: 30px;
+    margin-bottom: 30px;
+}
+
+.chart-card {
+    background: white;
+    border: 2px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 20px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.chart-card h3 {
+    margin-bottom: 15px;
+    color: #333;
+    font-size: 16px;
+    border-bottom: 2px solid #667eea;
+    padding-bottom: 8px;
+}
+
+.chart-card canvas {
+    width: 100%;
+    height: 200px;
+    border: 1px solid #eee;
+    border-radius: 4px;
+    background: #fafafa;
+}
+
+.metrics-info {
     background: #e7f3ff;
     border: 2px solid #667eea;
     border-radius: 8px;
@@ -939,36 +971,36 @@ button:disabled {
     margin-top: 30px;
 }
 
-.grafana-info h3 {
+.metrics-info h3 {
     margin-bottom: 15px;
     color: #333;
 }
 
-.grafana-info p {
+.metrics-info p {
     margin-bottom: 10px;
     color: #666;
 }
 
-.grafana-info ul {
+.metrics-info ul {
     margin-left: 20px;
     color: #666;
 }
 
-.grafana-info li {
+.metrics-info li {
     margin: 8px 0;
 }
 
-.grafana-info a {
+.metrics-info a {
     color: #667eea;
     text-decoration: none;
     font-weight: bold;
 }
 
-.grafana-info a:hover {
+.metrics-info a:hover {
     text-decoration: underline;
 }
 
-.grafana-info code {
+.metrics-info code {
     background: #f0f0f0;
     padding: 2px 6px;
     border-radius: 4px;
