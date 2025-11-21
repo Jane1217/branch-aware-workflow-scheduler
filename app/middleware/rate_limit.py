@@ -44,7 +44,8 @@ class RedisRateLimiter:
                 await self.redis_client.ping()
             except Exception as e:
                 # If Redis is not available, fall back to in-memory rate limiting
-                print(f"Redis not available, falling back to in-memory rate limiting: {e}")
+                # Redis not available, fallback to in-memory
+                pass
                 self.redis_client = None
         return self.redis_client
     
@@ -116,7 +117,8 @@ class RedisRateLimiter:
             
         except Exception as e:
             # On error, allow request but log warning
-            print(f"Rate limit check error: {e}")
+            # Rate limit check error, allow request
+            pass
             return True, {
                 "X-RateLimit-Limit": str(rate),
                 "X-RateLimit-Remaining": str(burst),

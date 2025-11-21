@@ -123,7 +123,8 @@ class WorkflowEngine:
                     })
             except Exception as e:
                 # Don't fail if WebSocket broadcast fails
-                print(f"Error broadcasting progress: {e}")
+                # Silent error handling
+                pass
     
     async def _update_workflow_progress(self, workflow_id: str):
         """Update overall workflow progress and status"""

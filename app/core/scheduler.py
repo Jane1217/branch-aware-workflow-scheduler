@@ -123,7 +123,8 @@ class BranchAwareScheduler:
                 break
             except Exception as e:
                 # Log error and continue
-                print(f"Scheduler error: {e}")
+                # Silent error handling
+                pass
                 await asyncio.sleep(1)
     
     async def _process_queues(self):

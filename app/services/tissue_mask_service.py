@@ -61,7 +61,6 @@ class TissueMaskService:
         
         # Log processing info
         level_dims = wsi.level_dimensions[wsi_level] if wsi_level < len(wsi.level_dimensions) else wsi.level_dimensions[0]
-        print(f"Generating tissue mask at level {wsi_level} ({level_dims[0]}x{level_dims[1]}px): {total_tiles} tiles")
         
         # Process tiles in batches with parallel execution
         all_mask_regions = []
@@ -149,7 +148,8 @@ class TissueMaskService:
             
             return mask_regions
         except Exception as e:
-            print(f"Error processing tile {tile} for tissue mask: {e}")
+            # Silent error handling
+            pass
             return []
     
     def _generate_tile_mask(self, tile_image: np.ndarray) -> np.ndarray:
