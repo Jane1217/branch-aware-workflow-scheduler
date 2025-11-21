@@ -161,15 +161,16 @@ class InstanSegService:
         if not INSTANSEG_AVAILABLE:
             raise ImportError("instanseg-torch is required. Install with: pip install instanseg-torch")
         
+        # WSI handler and tile processor for non-process-pool operations
+        # (e.g., getting tile coordinates, loading WSI for metadata)
         self.wsi_handler = WSIHandler()
         self.tile_processor = TileProcessor(
             tile_size=settings.TILE_SIZE,
             overlap=settings.TILE_OVERLAP
         )
         
-        # Initialize InstanSeg model
-        # Using "brightfield_nuclei" model for cell segmentation
-        # image_reader="tiffslide" for WSI support
+        # Initialize InstanSeg model for direct evaluation (non-WSI images)
+        # Note: For WSI processing, each worker process loads its own model
         try:
             self.model = InstanSeg(
                 "brightfield_nuclei",
@@ -330,6 +331,17 @@ class InstanSegService:
             "method": "tiled_parallel"
         }
     
+    def _clear_gpu_cache(self):
+        """Clear GPU cache to free memory (especially important for MPS backend)"""
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass  # Ignore errors in cache clearing
+    
     async def _process_single_tile_async(
         self,
         tile: Tuple[int, int, int, int],
@@ -356,149 +368,6 @@ class InstanSegService:
             settings.TILE_OVERLAP
         )
         return tile_cells
-    
-    def _process_single_tile_sync(
-        self,
-        tile: Tuple[int, int, int, int],
-        wsi,
-        wsi_level: int
-    ) -> List[Dict[str, Any]]:
-        """
-        Process a single tile synchronously (called from executor).
-        This is the actual InstanSeg inference on a tile.
-        
-        Includes GPU memory management for MPS backend.
-        """
-        try:
-            # Extract tile from WSI
-            tile_image = self.tile_processor.extract_tile(wsi, tile, level=wsi_level)
-            
-            # Run InstanSeg on tile
-            # Use eval_small_image for individual tiles
-            result = self.model.eval_small_image(
-                tile_image,
-                pixel_size=None  # Will try to read from metadata
-            )
-            
-            # Handle different return formats
-            if isinstance(result, tuple):
-                labeled_output, _ = result
-            else:
-                labeled_output = result
-            
-            # Convert to polygons and adjust coordinates
-            tile_cells = self._tile_segments_to_cells(labeled_output, tile)
-            
-            # Clear GPU cache after processing each tile (important for MPS)
-            self._clear_gpu_cache()
-            
-            return tile_cells
-        except RuntimeError as e:
-            if "out of memory" in str(e).lower() or "MPS" in str(e):
-                print(f"MPS memory error on tile {tile}, clearing cache and retrying...")
-                self._clear_gpu_cache()
-                # Retry once after clearing cache
-                try:
-                    result = self.model.eval_small_image(tile_image, pixel_size=None)
-                    if isinstance(result, tuple):
-                        labeled_output, _ = result
-                    else:
-                        labeled_output = result
-                    tile_cells = self._tile_segments_to_cells(labeled_output, tile)
-                    self._clear_gpu_cache()
-                    return tile_cells
-                except Exception as retry_e:
-                    print(f"Retry failed for tile {tile}: {retry_e}")
-                    return []
-            else:
-                print(f"Error processing tile {tile}: {e}")
-                return []
-        except Exception as e:
-            print(f"Error processing tile {tile}: {e}")
-            return []
-    
-    def _clear_gpu_cache(self):
-        """Clear GPU cache to free memory (especially important for MPS backend)"""
-        try:
-            import torch
-            if torch.backends.mps.is_available():
-                torch.mps.empty_cache()
-            elif torch.cuda.is_available():
-                torch.cuda.empty_cache()
-        except Exception:
-            pass  # Ignore errors in cache clearing
-    
-    def _tile_segments_to_cells(
-        self,
-        labeled_output,
-        tile_coords: Tuple[int, int, int, int]
-    ) -> List[Dict[str, Any]]:
-        """Convert labeled segmentation output to cell polygons with tile coordinates"""
-        cells = []
-        x_offset, y_offset, _, _ = tile_coords
-        
-        # Convert to numpy if needed
-        try:
-            if hasattr(labeled_output, 'cpu'):
-                labeled_output = labeled_output.cpu().numpy()
-        except ImportError:
-            pass
-        
-        # Ensure it's a numpy array
-        if not isinstance(labeled_output, np.ndarray):
-            labeled_output = np.array(labeled_output)
-        
-        # Check if array is valid and has sufficient size
-        if labeled_output.size == 0:
-            return cells
-        
-        # Check array dimensions (must be at least 2x2 for find_contours)
-        if len(labeled_output.shape) < 2:
-            return cells
-        
-        if labeled_output.shape[0] < 2 or labeled_output.shape[1] < 2:
-            return cells
-        
-        # Find contours for each labeled region
-        try:
-            from skimage import measure
-            
-            # Get unique labels (excluding background 0)
-            unique_labels = np.unique(labeled_output)
-            unique_labels = unique_labels[unique_labels > 0]
-            
-            for label_id in unique_labels:
-                # Create binary mask for this label
-                mask = (labeled_output == label_id).astype(np.uint8)
-                
-                # Skip if mask is too small (find_contours requires at least 2x2)
-                if mask.shape[0] < 2 or mask.shape[1] < 2:
-                    continue
-                
-                # Find contours
-                contours = measure.find_contours(mask, 0.5)
-                
-                for contour in contours:
-                    # Adjust coordinates to global WSI coordinates
-                    polygon = contour.tolist()
-                    for point in polygon:
-                        point[0] += y_offset  # y coordinate
-                        point[1] += x_offset  # x coordinate
-                    
-                    cells.append({
-                        "cell_id": f"cell_{label_id}_{len(cells)}",
-                        "label_id": int(label_id),
-                        "polygon": polygon,
-                        "area": np.sum(mask),
-                        "centroid": [
-                            np.mean(contour[:, 1]) + x_offset,
-                            np.mean(contour[:, 0]) + y_offset
-                        ]
-                    })
-        except Exception as e:
-            print(f"Error converting labeled output to cells: {e}")
-        
-        return cells
     
     def _labeled_to_cells(self, labeled_output) -> List[Dict[str, Any]]:
         """Convert labeled segmentation output to cell polygons"""
