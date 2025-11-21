@@ -21,7 +21,11 @@ ENV GDAL_CONFIG=/usr/bin/gdal-config
 ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
 ENV C_INCLUDE_PATH=/usr/include/gdal
 
+# Upgrade pip first
+RUN pip install --upgrade pip
+
 # Install Python dependencies
+# Note: instanseg-torch requires slideio>=2.6.2, which is now in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Install InstanSeg

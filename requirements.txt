@@ -18,6 +18,7 @@ scikit-image>=0.22.0  # Updated to match instanseg-torch requirements
 # InstanSeg for cell segmentation
 instanseg-torch
 tiffslide  # For WSI image reading support
+slideio>=2.6.2  # Required by instanseg-torch
 
 # Task queue and async
 redis>=5.0.0
