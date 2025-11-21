@@ -141,6 +141,8 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Docker Deployment
 
+**Prerequisites**: Make sure Docker Desktop (or Docker daemon) is running on your system.
+
 Start all services using Docker Compose:
 
 ```bash
@@ -150,6 +152,8 @@ docker compose up -d
 # Or for Docker Compose v1
 docker-compose up -d
 ```
+
+**Note**: If you see "Cannot connect to the Docker daemon", start Docker Desktop first.
 
 This starts:
 - **Backend API server** (port 8000)
