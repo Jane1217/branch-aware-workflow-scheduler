@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     WSI_LEVEL: int = 1  # WSI pyramid level (0=highest res, 1=faster with good quality, 2=fastest)
     
     # Concurrency Settings
-    TILE_PROCESSING_WORKERS: int = 2  # Thread pool size (reduced for MPS memory limits on macOS)
+    TILE_PROCESSING_WORKERS: int = 4  # Process pool size (true multi-core parallelism, set to CPU core count)
     
     # WebSocket Settings
     WS_HEARTBEAT_INTERVAL: int = 30

@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 import asyncio
 import warnings
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 
 # Suppress PyTorch warnings
 warnings.filterwarnings('ignore', category=UserWarning, message='.*CUDA.*')
@@ -23,6 +23,127 @@ except ImportError:
 from app.config import settings
 from app.utils.wsi_handler import WSIHandler
 from app.utils.tile_processor import TileProcessor
+
+
+# Module-level function for process pool (avoids serialization issues)
+def _process_tile_worker(
+    image_path: str,
+    tile: Tuple[int, int, int, int],
+    wsi_level: int,
+    tile_size: int,
+    overlap: int
+) -> List[Dict[str, Any]]:
+    """
+    Process a single tile in a worker process.
+    This function is called by ProcessPoolExecutor and must be at module level.
+    
+    It loads WSI and InstanSeg model in each process to avoid serialization issues.
+    """
+    try:
+        # Load WSI in this process (WSI objects cannot be serialized across processes)
+        wsi_handler = WSIHandler()
+        wsi = wsi_handler.load_wsi(image_path)
+        
+        # Load InstanSeg model in this process (models cannot be serialized)
+        if not INSTANSEG_AVAILABLE:
+            return []
+        
+        model = InstanSeg(
+            "brightfield_nuclei",
+            image_reader="tiffslide",
+            verbosity=0
+        )
+        
+        # Create tile processor
+        tile_processor = TileProcessor(tile_size=tile_size, overlap=overlap)
+        
+        # Extract tile from WSI
+        tile_image = tile_processor.extract_tile(wsi, tile, level=wsi_level)
+        
+        # Run InstanSeg on tile
+        result = model.eval_small_image(
+            tile_image,
+            pixel_size=None
+        )
+        
+        # Handle different return formats
+        if isinstance(result, tuple):
+            labeled_output, _ = result
+        else:
+            labeled_output = result
+        
+        # Convert to polygons and adjust coordinates
+        x_offset, y_offset, _, _ = tile
+        cells = []
+        
+        # Convert to numpy if needed
+        try:
+            if hasattr(labeled_output, 'cpu'):
+                labeled_output = labeled_output.cpu().numpy()
+        except ImportError:
+            pass
+        
+        # Check if array is valid
+        if not isinstance(labeled_output, np.ndarray):
+            labeled_output = np.array(labeled_output)
+        
+        if labeled_output.size == 0:
+            return cells
+        
+        if len(labeled_output.shape) < 2:
+            return cells
+        
+        if labeled_output.shape[0] < 2 or labeled_output.shape[1] < 2:
+            return cells
+        
+        # Find contours for each labeled region
+        try:
+            from skimage import measure
+            
+            unique_labels = np.unique(labeled_output)
+            unique_labels = unique_labels[unique_labels > 0]
+            
+            for label_id in unique_labels:
+                mask = (labeled_output == label_id).astype(np.uint8)
+                
+                if mask.shape[0] < 2 or mask.shape[1] < 2:
+                    continue
+                
+                contours = measure.find_contours(mask, 0.5)
+                
+                for contour in contours:
+                    polygon = contour.tolist()
+                    for point in polygon:
+                        point[0] += y_offset
+                        point[1] += x_offset
+                    
+                    cells.append({
+                        "cell_id": f"cell_{label_id}_{len(cells)}",
+                        "label_id": int(label_id),
+                        "polygon": polygon,
+                        "area": np.sum(mask),
+                        "centroid": [
+                            np.mean(contour[:, 1]) + x_offset,
+                            np.mean(contour[:, 0]) + y_offset
+                        ]
+                    })
+        except Exception as e:
+            print(f"Error converting labeled output to cells in worker: {e}")
+        
+        # Clear GPU cache after processing
+        try:
+            import torch
+            if torch.backends.mps.is_available():
+                torch.mps.empty_cache()
+            elif torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except Exception:
+            pass
+        
+        return cells
+    except Exception as e:
+        print(f"Error processing tile {tile} in worker process: {e}")
+        return []
 
 
 class InstanSegService:
@@ -59,11 +180,17 @@ class InstanSegService:
             print(f"Warning: Failed to load InstanSeg model: {e}")
             self.model = None
         
-        # Thread pool for parallel tile processing (Job-level concurrency)
-        # This allows multiple tiles to be processed concurrently within a single job
-        # Uses separate config for worker count to allow fine-tuning
-        tile_workers = getattr(settings, 'TILE_PROCESSING_WORKERS', settings.BATCH_SIZE)
-        self.tile_executor = ThreadPoolExecutor(max_workers=tile_workers)
+        # Process pool for true multi-core parallel processing (Job-level concurrency)
+        # ProcessPoolExecutor bypasses Python's GIL, enabling true parallelism
+        # Each process loads its own WSI and model to avoid serialization issues
+        import os
+        cpu_count = os.cpu_count() or 4
+        tile_workers = min(
+            getattr(settings, 'TILE_PROCESSING_WORKERS', cpu_count),
+            cpu_count  # Don't exceed CPU core count
+        )
+        self.tile_executor = ProcessPoolExecutor(max_workers=tile_workers)
+        print(f"Initialized ProcessPoolExecutor with {tile_workers} workers (CPU cores: {cpu_count})")
     
     async def segment_cells(
         self,
@@ -164,9 +291,10 @@ class InstanSegService:
             batch_tiles = tiles[batch_start:batch_start + settings.BATCH_SIZE]
             
             # Process batch tiles in parallel (Job-level concurrency)
-            # Each tile in the batch is processed concurrently
+            # Each tile in the batch is processed concurrently across CPU cores
+            # Pass image_path instead of wsi object (WSI cannot be serialized across processes)
             batch_tasks = [
-                self._process_single_tile_async(tile, wsi, wsi_level)
+                self._process_single_tile_async(tile, str(image_path), wsi_level)
                 for tile in batch_tiles
             ]
             
@@ -205,21 +333,27 @@ class InstanSegService:
     async def _process_single_tile_async(
         self,
         tile: Tuple[int, int, int, int],
-        wsi,
+        image_path: str,
         wsi_level: int
     ) -> List[Dict[str, Any]]:
         """
-        Process a single tile asynchronously.
-        This allows multiple tiles to be processed in parallel.
+        Process a single tile asynchronously using process pool.
+        This allows multiple tiles to be processed in parallel across CPU cores.
+        
+        Note: image_path is passed instead of wsi object because WSI objects
+        cannot be serialized across process boundaries.
         """
-        # Run tile processing in thread pool executor
+        # Run tile processing in process pool executor
+        # Use module-level function to avoid serialization issues
         loop = asyncio.get_event_loop()
         tile_cells = await loop.run_in_executor(
             self.tile_executor,
-            self._process_single_tile_sync,
+            _process_tile_worker,
+            image_path,
             tile,
-            wsi,
-            wsi_level
+            wsi_level,
+            settings.TILE_SIZE,
+            settings.TILE_OVERLAP
         )
         return tile_cells
     
