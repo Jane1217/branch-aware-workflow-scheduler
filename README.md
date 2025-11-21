@@ -6,7 +6,10 @@ A high-performance workflow scheduler for large-image inference tasks with branc
 
 Watch the demo video to see the system in action:
 
-[![Demo Video](https://img.shields.io/badge/Watch-Demo%20Video-blue)](demo.mp4)
+<video width="800" controls>
+  <source src="demo.mp4" type="video/mp4">
+  Your browser does not support the video tag. [Download the video](demo.mp4) instead.
+</video>
 
 Or download: [demo.mp4](demo.mp4)
 
