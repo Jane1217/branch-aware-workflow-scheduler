@@ -59,12 +59,6 @@ async def get_dashboard_metrics(request: Request):
     - Per-branch queue depth
     """
     try:
-        from app.utils.metrics import get_metrics
-        
-        # Get raw Prometheus metrics
-        metrics_text = get_metrics()
-        metrics = parse_prometheus_metrics(metrics_text)
-        
         # Get scheduler state from request (with error handling)
         if not hasattr(request.app.state, 'scheduler') or request.app.state.scheduler is None:
             return JSONResponse(
@@ -73,47 +67,65 @@ async def get_dashboard_metrics(request: Request):
             )
         
         scheduler = request.app.state.scheduler
-        user_limit_manager = request.app.state.user_limit_manager
         
-        # Extract active workers
-        active_workers_global = 0
+        # Initialize default values
+        active_workers_global = scheduler.get_running_jobs_count()
         active_workers_by_tenant = {}
-        if 'worker_active_jobs' in metrics:
-            for item in metrics['worker_active_jobs']:
-                tenant_id = item['labels'].get('tenant_id', 'unknown')
-                if tenant_id == 'global':
-                    active_workers_global = int(item['value'])
-                else:
-                    active_workers_by_tenant[tenant_id] = int(item['value'])
-        
-        # Extract queue depth by branch
         queue_depth_by_branch = {}
-        if 'queue_depth' in metrics:
-            for item in metrics['queue_depth']:
-                branch = item['labels'].get('branch_name', 'unknown')
-                tenant_id = item['labels'].get('tenant_id', 'unknown')
-                depth = int(item['value'])
-                if branch not in queue_depth_by_branch:
-                    queue_depth_by_branch[branch] = {}
-                queue_depth_by_branch[branch][tenant_id] = depth
-        
-        # Calculate average job latency
-        # Note: Prometheus Histogram stores _sum and _count, we calculate average from them
         avg_latency = 0.0
-        latency_sum_key = 'job_latency_seconds_sum'
-        latency_count_key = 'job_latency_seconds_count'
-        
-        if latency_sum_key in metrics and latency_count_key in metrics:
-            total_sum = sum(item['value'] for item in metrics[latency_sum_key])
-            total_count = sum(item['value'] for item in metrics[latency_count_key])
-            if total_count > 0:
-                avg_latency = total_sum / total_count
-        
-        # Get active users
         active_users_count = 0
-        if 'active_users' in metrics:
-            for item in metrics['active_users']:
-                active_users_count = int(item['value'])
+        
+        try:
+            from app.utils.metrics import get_metrics
+            
+            # Get raw Prometheus metrics
+            metrics_text = get_metrics()
+            metrics = parse_prometheus_metrics(metrics_text)
+            
+            # Extract active workers
+            if 'worker_active_jobs' in metrics:
+                for item in metrics['worker_active_jobs']:
+                    tenant_id = item['labels'].get('tenant_id', 'unknown')
+                    if tenant_id == 'global':
+                        active_workers_global = int(item['value'])
+                    else:
+                        active_workers_by_tenant[tenant_id] = int(item['value'])
+            
+            # Extract queue depth by branch
+            if 'queue_depth' in metrics:
+                for item in metrics['queue_depth']:
+                    branch = item['labels'].get('branch_name', 'unknown')
+                    tenant_id = item['labels'].get('tenant_id', 'unknown')
+                    depth = int(item['value'])
+                    if branch not in queue_depth_by_branch:
+                        queue_depth_by_branch[branch] = {}
+                    queue_depth_by_branch[branch][tenant_id] = depth
+            
+            # Calculate average job latency
+            # Note: Prometheus Histogram stores _sum and _count, we calculate average from them
+            latency_sum_key = 'job_latency_seconds_sum'
+            latency_count_key = 'job_latency_seconds_count'
+            
+            if latency_sum_key in metrics and latency_count_key in metrics:
+                total_sum = sum(item['value'] for item in metrics[latency_sum_key])
+                total_count = sum(item['value'] for item in metrics[latency_count_key])
+                if total_count > 0:
+                    avg_latency = total_sum / total_count
+            
+            # Get active users
+            if 'active_users' in metrics:
+                for item in metrics['active_users']:
+                    active_users_count = int(item['value'])
+        except Exception as parse_error:
+            # If metrics parsing fails, use scheduler state directly
+            pass
+        
+        # Get active users from user_limit_manager if available
+        try:
+            if hasattr(request.app.state, 'user_limit_manager'):
+                active_users_count = await request.app.state.user_limit_manager.get_active_count()
+        except Exception:
+            pass
         
         return JSONResponse(content={
             'active_workers': {
