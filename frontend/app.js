@@ -710,9 +710,9 @@ function formatJobResults(data) {
                     <div class="result-stat">
                         <strong>Processing Method:</strong> ${data.results.method || 'unknown'}
                     </div>
-                    ${data.results.tiles_processed ? `
+                    ${data.results.tiles_processed !== undefined ? `
                     <div class="result-stat">
-                        <strong>Tiles Processed:</strong> ${data.results.tiles_processed}
+                        <strong>Tiles Processed:</strong> ${data.results.tiles_processed}${data.results.tiles_total ? ` / ${data.results.tiles_total}` : ''}
                     </div>
                     ` : ''}
                 </div>
@@ -908,13 +908,12 @@ function displayVisualization(data) {
                         <input type="checkbox" id="showCentroids" checked onchange="updateVisualization()">
                         Show Centroids
                     </label>
-                    <button class="btn-small" onclick="resetVisualizationView()">Reset View</button>
                 </div>
             </div>
             <div class="visualization-stats">
                 <h4>Cell Statistics</h4>
                 <p>Total cells detected: ${data.total_cells}</p>
-                <p>Tiles processed: ${data.tiles_processed} / ${data.tiles_total}</p>
+                <p>Tiles processed: ${data.tiles_processed || 0} / ${data.tiles_total || data.tiles_processed || 0}</p>
             </div>
         `;
         
@@ -1012,11 +1011,6 @@ function updateVisualization() {
     }
 }
 
-function resetVisualizationView() {
-    if (window.visualizationData) {
-        drawVisualization(window.visualizationData);
-    }
-}
 
 // Monitoring functions
 let latencyChart = null;

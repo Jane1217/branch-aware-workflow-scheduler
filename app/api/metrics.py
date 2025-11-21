@@ -60,15 +60,14 @@ async def get_dashboard_metrics(request: Request):
     """
     try:
         from app.utils.metrics import get_metrics
-        from app.main import app
         
         # Get raw Prometheus metrics
         metrics_text = get_metrics()
         metrics = parse_prometheus_metrics(metrics_text)
         
-        # Get scheduler state
-        scheduler = app.state.scheduler
-        user_limit_manager = app.state.user_limit_manager
+        # Get scheduler state from request
+        scheduler = request.app.state.scheduler
+        user_limit_manager = request.app.state.user_limit_manager
         
         # Extract active workers
         active_workers_global = 0

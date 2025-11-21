@@ -54,10 +54,9 @@ def _process_tile_worker(
                 image_reader="tiffslide",
                 verbosity=0
             )
-            print(f"DEBUG: Tile {tile} - InstanSeg model loaded successfully (brightfield_nuclei v0.1.1)")
+            pass
         except Exception as model_error:
-            print(f"ERROR: Tile {tile} - Failed to load InstanSeg model: {type(model_error).__name__}: {str(model_error)}")
-            print(f"ERROR: Model may need to be downloaded manually from: https://github.com/instanseg/instanseg/releases/download/instanseg_models_v0.1.1/brightfield_nuclei.zip")
+            pass
             return []
         
         # Create tile processor
@@ -97,17 +96,7 @@ def _process_tile_worker(
                 tile_min, tile_max = None, None
         
         if is_pure_white:
-            print(f"DEBUG: Tile {tile} at Level {wsi_level} is detected as PURE BACKGROUND (Skipping InstanSeg)")
             return []
-        
-
-        print(f"DEBUG: Tile {tile} at Level {wsi_level} is PROCESSING (Potential Tissue) - pixel range: [{tile_min}, {tile_max}]")
-        
-
-        if isinstance(tile_image, np.ndarray):
-            print(f"DEBUG: Tile {tile} - Input image shape: {tile_image.shape}, dtype: {tile_image.dtype}, min: {np.min(tile_image)}, max: {np.max(tile_image)}")
-        else:
-            print(f"DEBUG: Tile {tile} - Input image type: {type(tile_image)}")
         
         # Run InstanSeg on tile using the recommended approach
         # According to InstanSeg docs: use read_image + eval_small_image for better control
@@ -134,13 +123,7 @@ def _process_tile_worker(
             else:
                 labeled_output = result
             
-            # [关键调试点 A：检查模型原始输出] - 在转换为numpy之前
-            # 先检查原始输出类型
-            print(f"DEBUG: Tile {tile} - Model result type: {type(result)}, labeled_output type: {type(labeled_output)}")
-                
         except Exception as e:
-            # [诊断代码] 打印错误信息
-            print(f"DEBUG: Tile {tile} - InstanSeg eval_small_image failed: {type(e).__name__}: {str(e)}")
             # Fallback: try without pixel_size
             try:
                 result = model.eval_small_image(
@@ -152,8 +135,6 @@ def _process_tile_worker(
                 else:
                     labeled_output = result
             except Exception as e2:
-                # [诊断代码] 打印 fallback 错误信息
-                print(f"DEBUG: Tile {tile} - InstanSeg fallback also failed: {type(e2).__name__}: {str(e2)}")
                 return []  # Return empty cells on error
         
         # Convert to polygons and adjust coordinates
@@ -181,38 +162,22 @@ def _process_tile_worker(
         
         # Ensure it's a 2D array (H, W) for skimage.measure.find_contours
         if len(labeled_output_np.shape) != 2:
-            print(f"ERROR: Tile {tile} - labeled_output shape is not 2D after squeezing: {labeled_output_np.shape}")
             return cells
         
-        # [Key Debug Point A: Check model raw output]
+        # Check model raw output
         unique_labels_all = np.unique(labeled_output_np)
         non_background_labels = unique_labels_all[unique_labels_all > 0]
         
-        print(f"DEBUG: Tile {tile} Model Output: Unique Labels (incl. 0): {len(unique_labels_all)}, Cells Detected: {len(non_background_labels)}")
-        if len(non_background_labels) > 0:
-            print(f"DEBUG: Tile {tile} - Model found cells! Label IDs: {non_background_labels[:10] if len(non_background_labels) > 10 else non_background_labels}")
-        else:
-            print(f"DEBUG: Tile {tile} - Model found NO cells (all pixels are background 0)")
-        
         if labeled_output_np.size == 0:
-            print(f"DEBUG: Tile {tile} - labeled_output is empty, returning empty cells")
             return cells
-        
-        # [Diagnostic code] Check InstanSeg output details
-        print(f"DEBUG: Tile {tile} - labeled_output shape: {labeled_output_np.shape}, dtype: {labeled_output_np.dtype}")
-        print(f"DEBUG: Tile {tile} - labeled_output min: {np.min(labeled_output_np)}, max: {np.max(labeled_output_np)}")
         
         # Find contours for each labeled region
         try:
             from skimage import measure
             
-            # 如果模型检测到细胞，开始轮廓提取
+            # Extract contours if cells detected
             if len(non_background_labels) == 0:
-                print(f"DEBUG: Tile {tile} - No cells to extract contours from (all labels are 0)")
                 return cells
-            
-            print(f"DEBUG: Tile {tile} - Starting contour extraction for {len(non_background_labels)} detected cells")
-            cells_before_contours = len(cells)
             
             for label_id in non_background_labels:
                 try:
@@ -225,25 +190,20 @@ def _process_tile_worker(
                     # Check if mask has any non-zero pixels
                     mask_sum = np.sum(mask)
                     if mask_sum == 0:
-                        print(f"DEBUG: Tile {tile} - Label {label_id} mask is empty (sum=0), skipping")
                         continue
                     
-                    # [关键调试点 B：检查轮廓提取]
+                    # Extract contours
                     try:
                         contours = measure.find_contours(mask, 0.5)
-                        print(f"DEBUG: Tile {tile} - Label {label_id}: mask_sum={mask_sum}, contours found: {len(contours)}")
-                    except Exception as contour_error:
-                        print(f"ERROR: Tile {tile} - Failed to find contours for label {label_id}: {type(contour_error).__name__}: {str(contour_error)}")
+                    except Exception:
                         continue
                     
                     if len(contours) == 0:
-                        print(f"DEBUG: Tile {tile} - Label {label_id}: No contours found (mask has pixels but find_contours returned empty)")
                         continue
                     
                     for contour in contours:
                         # Skip very small contours (likely noise)
                         if len(contour) < 3:
-                            print(f"DEBUG: Tile {tile} - Label {label_id}: Skipping contour with < 3 points")
                             continue
                         
                         polygon = contour.tolist()
@@ -268,13 +228,8 @@ def _process_tile_worker(
                             "area": int(np.sum(mask)),  # Ensure integer
                             "centroid": [centroid_x, centroid_y]  # [x, y] format
                         })
-                except Exception as e:
-                    print(f"ERROR: Tile {tile} - Failed to extract contour for label {label_id}: {type(e).__name__}: {str(e)}")
+                except Exception:
                     continue
-            
-            # [关键调试点 C：检查轮廓提取结果]
-            cells_after_contours = len(cells)
-            print(f"DEBUG: Tile {tile} - Contour extraction: {cells_before_contours} -> {cells_after_contours} cells extracted")
         except Exception as e:
             # Silent error handling - skip cells that can't be converted
             pass
@@ -326,12 +281,9 @@ class InstanSegService:
                 image_reader="tiffslide",
                 verbosity=0  # Reduce verbosity for production
             )
-            print("DEBUG: InstanSeg model loaded successfully (brightfield_nuclei v0.1.1)")
-            print("DEBUG: Model info: https://github.com/instanseg/instanseg/releases/download/instanseg_models_v0.1.1/brightfield_nuclei.zip")
-        except Exception as e:
-            print(f"ERROR: Failed to load InstanSeg model: {type(e).__name__}: {str(e)}")
-            print(f"ERROR: Model may need to be downloaded manually from: https://github.com/instanseg/instanseg/releases/download/instanseg_models_v0.1.1/brightfield_nuclei.zip")
-            print(f"ERROR: Check if model is in the expected cache directory")
+            pass
+        except Exception:
+            pass
             self.model = None
         
         # Process pool for true multi-core parallel processing (Job-level concurrency)
@@ -344,7 +296,6 @@ class InstanSegService:
         # Ensure it doesn't exceed CPU core count
         tile_workers = min(tile_workers, cpu_count)
         self.tile_executor = ProcessPoolExecutor(max_workers=tile_workers)
-        print(f"Initialized ProcessPoolExecutor with {tile_workers} workers (CPU cores: {cpu_count}, configured: {getattr(settings, 'TILE_PROCESSING_WORKERS', 1)})")
     
     async def segment_cells(
         self,
@@ -408,7 +359,6 @@ class InstanSegService:
             }
         except Exception as e:
             # Fall back to tiled processing if direct evaluation fails
-            print(f"Direct evaluation failed, using optimized tiled processing: {e}")
             return await self._segment_cells_tiled(image_path, progress_callback)
     
     async def _segment_cells_tiled(
@@ -434,7 +384,6 @@ class InstanSegService:
         
         # Log processing info
         level_dims = wsi.level_dimensions[wsi_level] if wsi_level < len(wsi.level_dimensions) else wsi.level_dimensions[0]
-        print(f"Processing WSI at level {wsi_level} ({level_dims[0]}x{level_dims[1]}px): {total_tiles} tiles")
         
         all_cells = []
         processed_tiles = 0
@@ -479,8 +428,6 @@ class InstanSegService:
         # merged_cells = self._merge_overlapping_cells(all_cells)
         merged_cells = all_cells  # 直接返回原始检测结果，不进行合并
         
-        print(f"DEBUG: Total unmerged cells detected: {len(all_cells)}")
-        print(f"DEBUG: Total merged cells (after deduplication): {len(merged_cells)}")
         
         return {
             "cells": merged_cells,
