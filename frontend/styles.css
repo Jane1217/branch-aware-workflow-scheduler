@@ -101,12 +101,7 @@ header {
     color: #888;
 }
 
-.help-icon {
-    cursor: help;
-    color: #667eea;
-    margin-left: 5px;
-    font-size: 14px;
-}
+/* Removed help-icon styles */
 
 .required {
     color: #e74c3c;
@@ -750,59 +745,7 @@ button:disabled {
     background: #3498db;
 }
 
-/* Help Section */
-.help-section {
-    max-width: 900px;
-}
-
-.help-content {
-    display: flex;
-    flex-direction: column;
-    gap: 25px;
-}
-
-.help-item {
-    background: #f8f9fa;
-    padding: 20px;
-    border-radius: 8px;
-    border-left: 4px solid #667eea;
-}
-
-.help-item h3 {
-    color: #333;
-    margin-bottom: 10px;
-    font-size: 18px;
-}
-
-.help-item p {
-    color: #666;
-    line-height: 1.6;
-    margin-bottom: 10px;
-}
-
-.help-item ol,
-.help-item ul {
-    margin-left: 20px;
-    color: #666;
-    line-height: 1.8;
-}
-
-.help-item li {
-    margin-bottom: 8px;
-}
-
-.help-item code {
-    background: #e9ecef;
-    padding: 2px 6px;
-    border-radius: 3px;
-    font-family: monospace;
-    font-size: 13px;
-}
-
-.help-item ul ul {
-    margin-top: 5px;
-    margin-bottom: 10px;
-}
+/* Removed Help Section styles */
 
 /* Responsive */
 @media (max-width: 768px) {

@@ -25,10 +25,12 @@ class BranchAwareScheduler:
     def __init__(
         self,
         user_limit_manager: UserLimitManager,
-        tenant_manager: TenantManager
+        tenant_manager: TenantManager,
+        workflow_engine=None
     ):
         self.user_limit_manager = user_limit_manager
         self.tenant_manager = tenant_manager
+        self.workflow_engine = workflow_engine  # Reference to workflow engine for status updates
         
         # Branch queues: branch_id -> deque of jobs
         self.branch_queues: Dict[str, Deque[Job]] = defaultdict(deque)
@@ -172,6 +174,9 @@ class BranchAwareScheduler:
                 job.status = JobStatus.RUNNING
                 job.started_at = datetime.now()
                 
+                # Notify workflow engine about job status change
+                await self._notify_workflow_engine(job)
+                
                 # Execute job in background
                 asyncio.create_task(self._execute_job(job))
     
@@ -268,6 +273,9 @@ class BranchAwareScheduler:
             if job.status != JobStatus.FAILED:
                 job.status = JobStatus.SUCCEEDED
             
+            # Notify workflow engine about job completion
+            await self._notify_workflow_engine(job)
+            
             # Release worker slot
             self.worker_semaphore.release()
             
@@ -299,3 +307,16 @@ class BranchAwareScheduler:
     def get_running_jobs_count(self) -> int:
         """Get number of currently running jobs"""
         return len(self.running_jobs)
+    
+    async def _notify_workflow_engine(self, job: Job):
+        """Notify workflow engine about job status changes"""
+        try:
+            if self.workflow_engine:
+                # Find workflow containing this job and update its progress
+                for workflow in self.workflow_engine.workflows.values():
+                    if any(j.job_id == job.job_id for j in workflow.jobs):
+                        await self.workflow_engine._update_workflow_progress(workflow.workflow_id)
+                        break
+        except Exception as e:
+            # Don't fail if notification fails
+            pass

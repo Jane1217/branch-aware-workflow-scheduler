@@ -36,8 +36,9 @@ async def lifespan(app: FastAPI):
     
     user_limit_manager = UserLimitManager()
     tenant_manager = TenantManager()
-    scheduler = BranchAwareScheduler(user_limit_manager, tenant_manager)
-    workflow_engine = WorkflowEngine(scheduler)
+    workflow_engine = WorkflowEngine(None)  # Will be set after scheduler creation
+    scheduler = BranchAwareScheduler(user_limit_manager, tenant_manager, workflow_engine)
+    workflow_engine.scheduler = scheduler  # Set scheduler reference
     
     # Initialize image processor
     image_processor = ImageProcessor()

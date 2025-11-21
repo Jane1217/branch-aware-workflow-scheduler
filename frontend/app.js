@@ -244,7 +244,7 @@ function addJob() {
         <div class="form-row">
             <div class="form-group">
                 <label>
-                    Job ID <span class="help-icon" title="Leave empty for auto-generated ID">ℹ️</span>
+                    Job ID
                 </label>
                 <input type="text" name="job_id_${jobIndex}" placeholder="Auto: job-${jobIndex + 1}">
             </div>
@@ -252,7 +252,6 @@ function addJob() {
             <div class="form-group">
                 <label>
                     Job Type <span class="required">*</span>
-                    <span class="help-icon" title="Cell Segmentation: Detects cells. Tissue Mask: Creates tissue region mask">ℹ️</span>
                 </label>
                 <select name="job_type_${jobIndex}" required oninvalid="this.setCustomValidity('Job type is required')" oninput="this.setCustomValidity('')">
                     <option value="">-- Select Type --</option>
@@ -265,7 +264,6 @@ function addJob() {
         <div class="form-group">
             <label>
                 Image File <span class="required">*</span>
-                <span class="help-icon" title="Select an image file to process">ℹ️</span>
             </label>
             <select name="image_path_${jobIndex}" class="image-selector" required oninvalid="this.setCustomValidity('Please select an image file')" oninput="this.setCustomValidity('')">
                 <option value="">-- Select Image --</option>
@@ -280,7 +278,6 @@ function addJob() {
             <div class="form-group">
                 <label>
                     Branch <span class="required">*</span>
-                    <span class="help-icon" title="Jobs in same branch run sequentially. Different branches run in parallel.">ℹ️</span>
                 </label>
                 <input type="text" name="branch_${jobIndex}" placeholder="e.g., branch-1" required oninvalid="this.setCustomValidity('Branch is required')" oninput="this.setCustomValidity('')">
             </div>
@@ -288,7 +285,6 @@ function addJob() {
             <div class="form-group">
                 <label>
                     Depends On
-                    <span class="help-icon" title="Comma-separated job IDs that must complete first (e.g., job-1,job-2)">ℹ️</span>
                 </label>
                 <input type="text" name="depends_on_${jobIndex}" placeholder="job-1, job-2 (optional)">
             </div>

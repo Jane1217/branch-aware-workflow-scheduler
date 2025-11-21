@@ -17,7 +17,6 @@
                 <div class="info-box">
                     <label for="userId">
                         <strong>Your User ID:</strong>
-                        <span class="help-icon" title="Each user has isolated workflows. Use different IDs to test multi-tenant isolation.">ℹ️</span>
                     </label>
                     <div class="input-group">
                         <input type="text" id="userId" placeholder="e.g., user-1" value="user-1">
@@ -33,7 +32,6 @@
         <div class="tabs">
             <button class="tab-btn active" onclick="showTab('create')">➕ Create Workflow</button>
             <button class="tab-btn" onclick="showTab('workflows')">📋 My Workflows</button>
-            <button class="tab-btn" onclick="showTab('help')">❓ Help & Guide</button>
         </div>
 
         <!-- Create Workflow Tab -->
@@ -51,7 +49,6 @@
                     <div class="form-group">
                         <label for="workflowName">
                             Workflow Name <span class="required">*</span>
-                            <span class="help-icon" title="Give your workflow a descriptive name">ℹ️</span>
                         </label>
                         <input type="text" id="workflowName" required placeholder="e.g., Cell Analysis for Sample 001">
                     </div>
@@ -99,79 +96,6 @@
             </section>
         </div>
 
-        <!-- Help Tab -->
-        <div id="helpTab" class="tab-content">
-            <section class="help-section">
-                <h2>📖 User Guide</h2>
-                
-                <div class="help-content">
-                    <div class="help-item">
-                        <h3>🎯 What is this platform?</h3>
-                        <p>This platform processes large medical images (Whole Slide Images, WSI) to detect and segment cells. 
-                        You can create workflows with multiple processing jobs that run automatically.</p>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>📝 How to create a workflow:</h3>
-                        <ol>
-                            <li><strong>Enter a workflow name</strong> - Give it a descriptive name</li>
-                            <li><strong>Add jobs</strong> - Click "Add Job" for each image you want to process</li>
-                            <li><strong>Configure each job:</strong>
-                                <ul>
-                                    <li><strong>Job Type:</strong> Choose what to do with the image
-                                        <ul>
-                                            <li><code>Cell Segmentation</code> - Detects and segments all cells in the image</li>
-                                            <li><code>Tissue Mask</code> - Creates a binary mask showing tissue regions</li>
-                                        </ul>
-                                    </li>
-                                    <li><strong>Select Image:</strong> Choose from available test images</li>
-                                    <li><strong>Branch:</strong> Jobs in the same branch run one after another. Use different branch names for parallel processing.</li>
-                                    <li><strong>Depends On:</strong> Optional. List job IDs that must complete first (e.g., "job-1,job-2")</li>
-                                </ul>
-                            </li>
-                            <li><strong>Submit</strong> - Click "Submit Workflow" to start processing</li>
-                        </ol>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>🔄 Understanding Branches:</h3>
-                        <p><strong>Same Branch = Serial Execution:</strong> If two jobs use "branch-1", they run one after another.</p>
-                        <p><strong>Different Branches = Parallel Execution:</strong> Jobs in "branch-1" and "branch-2" can run at the same time.</p>
-                        <p><strong>Example:</strong> If you have 3 jobs in branch-1 and 2 jobs in branch-2, the system will run 2 jobs in parallel (one from each branch) until all are done.</p>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>👥 Multi-Tenant System:</h3>
-                        <p>Each user (identified by User ID) can only see and manage their own workflows. 
-                        At most 3 users can have running jobs at the same time. The 4th user will wait in queue.</p>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>📊 Monitoring Progress:</h3>
-                        <ul>
-                            <li>Workflows auto-refresh every 2 seconds</li>
-                            <li>Connect WebSocket for real-time updates</li>
-                            <li>Progress bars show completion percentage</li>
-                            <li>Click "View Jobs" to see individual task status</li>
-                        </ul>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>🖼️ Available Test Images:</h3>
-                        <ul id="availableImages">
-                            <li>Loading images...</li>
-                        </ul>
-                        <p><small>These are sample Whole Slide Images (WSI) in Aperio SVS format for testing.</small></p>
-                    </div>
-
-                    <div class="help-item">
-                        <h3>❌ Canceling Jobs:</h3>
-                        <p>You can cancel jobs that are still waiting in the queue (status: PENDING). 
-                        Once a job starts running, it cannot be cancelled.</p>
-                    </div>
-                </div>
-            </section>
-        </div>
     </div>
 
     <script src="/static/app.js"></script>

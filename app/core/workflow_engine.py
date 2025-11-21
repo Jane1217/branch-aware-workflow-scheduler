@@ -126,7 +126,7 @@ class WorkflowEngine:
                 print(f"Error broadcasting progress: {e}")
     
     async def _update_workflow_progress(self, workflow_id: str):
-        """Update overall workflow progress"""
+        """Update overall workflow progress and status"""
         if workflow_id not in self.workflows:
             return
         
@@ -134,33 +134,45 @@ class WorkflowEngine:
         if not workflow.jobs:
             return
         
-        # Check if workflow should transition from PENDING to RUNNING
-        # (when user gets an active slot)
-        if workflow.status == JobStatus.PENDING:
-            user_limit_manager = self.scheduler.user_limit_manager
-            has_slot = await user_limit_manager.is_active(workflow.tenant_id)
-            if has_slot:
-                workflow.status = JobStatus.RUNNING
-                if not workflow.started_at:
-                    workflow.started_at = datetime.now()
-        
         # Calculate progress as average of all jobs
         total_progress = sum(job.progress for job in workflow.jobs)
         workflow.progress = total_progress / len(workflow.jobs)
         
-        # Check if all jobs are completed (SUCCEEDED, FAILED, or CANCELLED)
+        # Check job statuses to determine workflow status
+        # Priority: RUNNING > FAILED > SUCCEEDED > PENDING
+        has_running = any(job.status == JobStatus.RUNNING for job in workflow.jobs)
+        has_failed = any(job.status == JobStatus.FAILED for job in workflow.jobs)
         all_completed = all(
             job.status in [JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELLED]
             for job in workflow.jobs
         )
         
-        if all_completed and workflow.status != JobStatus.SUCCEEDED and workflow.status != JobStatus.FAILED:
-            # Check if any job failed
-            if any(job.status == JobStatus.FAILED for job in workflow.jobs):
+        # Update workflow status based on job statuses
+        if has_running:
+            # If any job is running, workflow is running
+            if workflow.status != JobStatus.RUNNING:
+                workflow.status = JobStatus.RUNNING
+                if not workflow.started_at:
+                    workflow.started_at = datetime.now()
+        elif all_completed:
+            # All jobs completed - determine final status
+            if has_failed:
                 workflow.status = JobStatus.FAILED
             else:
                 workflow.status = JobStatus.SUCCEEDED
-            workflow.completed_at = datetime.now()
+            if not workflow.completed_at:
+                workflow.completed_at = datetime.now()
+        else:
+            # Some jobs pending, but none running
+            # Check if user has active slot to determine if should be RUNNING or PENDING
+            user_limit_manager = self.scheduler.user_limit_manager
+            has_slot = await user_limit_manager.is_active(workflow.tenant_id)
+            if has_slot:
+                # User has slot but no jobs running yet - keep as PENDING until job starts
+                workflow.status = JobStatus.PENDING
+            else:
+                # User doesn't have slot - keep as PENDING
+                workflow.status = JobStatus.PENDING
     
     def get_workflow(self, workflow_id: str) -> Optional[Workflow]:
         """Get a workflow by ID"""
