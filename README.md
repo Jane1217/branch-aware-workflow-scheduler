@@ -119,11 +119,19 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-#### 4. Install InstanSeg
+#### 4. Install InstanSeg (Optional but Recommended)
+
+**Note**: `instanseg-torch` has dependency conflicts and is not included in `requirements.txt`. Install it separately:
 
 ```bash
+# Option 1: Install from PyPI (may have dependency issues)
+pip install instanseg-torch
+
+# Option 2: Install from GitHub (recommended)
 pip install git+https://github.com/instanseg/instanseg.git
 ```
+
+If installation fails due to missing dependencies (e.g., `slideio`), the system will still run but cell segmentation features will be unavailable.
 
 #### 5. Build Frontend CSS (Required for UI)
 
@@ -163,14 +171,15 @@ cd branch-aware-workflow-scheduler
 #### 2. Start All Services
 
 ```bash
-# For Docker Compose v2 (recommended)
 docker compose up -d
-
-# Or for Docker Compose v1
-docker-compose up -d
 ```
 
-**Note**: If you see "Cannot connect to the Docker daemon", start Docker Desktop first.
+**Note**: 
+- If you see "Cannot connect to the Docker daemon", start Docker Desktop first.
+- **InstanSeg is not installed in Docker by default** due to dependency conflicts. If you need cell segmentation features, install it manually after the container is running:
+  ```bash
+  docker compose exec api pip install instanseg-torch
+  ```
 
 This starts:
 - **Backend API server** (port 8000)

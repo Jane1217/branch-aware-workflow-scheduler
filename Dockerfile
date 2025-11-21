@@ -1,11 +1,13 @@
 FROM python:3.11-slim
 
-# Install system dependencies for OpenSlide, GDAL (for rasterio), and curl (for health checks)
+# Install system dependencies for OpenSlide, GDAL (for rasterio), libtiff (for slideio), and curl (for health checks)
 RUN apt-get update && apt-get install -y \
     openslide-tools \
     libopenslide-dev \
     gdal-bin \
     libgdal-dev \
+    libtiff-dev \
+    libtiff5 \
     g++ \
     curl \
     && rm -rf /var/lib/apt/lists/*
@@ -25,11 +27,12 @@ ENV C_INCLUDE_PATH=/usr/include/gdal
 RUN pip install --upgrade pip
 
 # Install Python dependencies
-# Note: instanseg-torch requires slideio>=2.6.2, which is now in requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Install InstanSeg
-RUN pip install git+https://github.com/instanseg/instanseg.git || echo "InstanSeg installation failed, will use fallback"
+# Note: InstanSeg (instanseg-torch) is not installed in Docker by default
+# due to dependency conflicts. Users need to install it manually if needed:
+# RUN pip install instanseg-torch
+# Or: RUN pip install git+https://github.com/instanseg/instanseg.git
 
 # Copy application code
 COPY . .

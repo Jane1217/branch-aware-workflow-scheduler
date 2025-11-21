@@ -16,9 +16,10 @@ openslide-python>=1.3.0
 scikit-image>=0.22.0  # Updated to match instanseg-torch requirements
 
 # InstanSeg for cell segmentation
-instanseg-torch
+# Note: instanseg-torch is not included here due to dependency conflicts
+# Install it separately: pip install instanseg-torch
+# Or use: pip install git+https://github.com/instanseg/instanseg.git
 tiffslide  # For WSI image reading support
-slideio>=2.6.2  # Required by instanseg-torch
 
 # Task queue and async
 redis>=5.0.0
