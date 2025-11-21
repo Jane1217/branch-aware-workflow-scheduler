@@ -269,7 +269,15 @@ class InstanSegService:
         if not isinstance(labeled_output, np.ndarray):
             labeled_output = np.array(labeled_output)
         
+        # Check if array is valid and has sufficient size
         if labeled_output.size == 0:
+            return cells
+        
+        # Check array dimensions (must be at least 2x2 for find_contours)
+        if len(labeled_output.shape) < 2:
+            return cells
+        
+        if labeled_output.shape[0] < 2 or labeled_output.shape[1] < 2:
             return cells
         
         # Find contours for each labeled region
@@ -283,6 +291,10 @@ class InstanSegService:
             for label_id in unique_labels:
                 # Create binary mask for this label
                 mask = (labeled_output == label_id).astype(np.uint8)
+                
+                # Skip if mask is too small (find_contours requires at least 2x2)
+                if mask.shape[0] < 2 or mask.shape[1] < 2:
+                    continue
                 
                 # Find contours
                 contours = measure.find_contours(mask, 0.5)
@@ -324,7 +336,15 @@ class InstanSegService:
         if not isinstance(labeled_output, np.ndarray):
             labeled_output = np.array(labeled_output)
         
+        # Check if array is valid and has sufficient size
         if labeled_output.size == 0:
+            return cells
+        
+        # Check array dimensions (must be at least 2x2 for find_contours)
+        if len(labeled_output.shape) < 2:
+            return cells
+        
+        if labeled_output.shape[0] < 2 or labeled_output.shape[1] < 2:
             return cells
         
         # Find contours for each labeled region
@@ -338,6 +358,10 @@ class InstanSegService:
             for label_id in unique_labels:
                 # Create binary mask for this label
                 mask = (labeled_output == label_id).astype(np.uint8)
+                
+                # Skip if mask is too small (find_contours requires at least 2x2)
+                if mask.shape[0] < 2 or mask.shape[1] < 2:
+                    continue
                 
                 # Find contours
                 contours = measure.find_contours(mask, 0.5)
