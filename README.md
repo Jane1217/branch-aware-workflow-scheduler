@@ -149,9 +149,18 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 ### Docker Deployment
 
-**Prerequisites**: Make sure Docker Desktop (or Docker daemon) is running on your system.
+**Prerequisites**: 
+- Docker Desktop (or Docker daemon) must be running
+- Git must be installed
 
-Start all services using Docker Compose:
+#### 1. Clone the Repository
+
+```bash
+git clone https://github.com/Jane1217/branch-aware-workflow-scheduler.git
+cd branch-aware-workflow-scheduler
+```
+
+#### 2. Start All Services
 
 ```bash
 # For Docker Compose v2 (recommended)
