@@ -151,7 +151,6 @@ function stopAutoRefresh() {
     if (autoRefreshInterval) {
         clearInterval(autoRefreshInterval);
         autoRefreshInterval = null;
-        console.log('Auto-refresh stopped');
     }
     if (autoRefreshCheckInterval) {
         clearInterval(autoRefreshCheckInterval);
@@ -175,7 +174,6 @@ function connectWebSocket() {
     wsConnection = new WebSocket(wsUrl);
 
     wsConnection.onopen = () => {
-        console.log('WebSocket connected');
         document.getElementById('wsStatus').textContent = '🟢';
         document.getElementById('connectBtn').classList.add('connected');
         showNotification('Connected to real-time updates', 'success');
@@ -206,13 +204,11 @@ function connectWebSocket() {
     };
 
     wsConnection.onerror = (error) => {
-        console.error('WebSocket error:', error);
         document.getElementById('wsStatus').textContent = '🔴';
         document.getElementById('connectBtn').classList.remove('connected');
     };
 
     wsConnection.onclose = () => {
-        console.log('WebSocket disconnected');
         document.getElementById('wsStatus').textContent = '🔌';
         document.getElementById('connectBtn').classList.remove('connected');
     };
@@ -435,8 +431,7 @@ async function handleSubmitWorkflow(e) {
             submitBtn.textContent = '🚀 Submit Workflow';
         }
     } catch (error) {
-        console.error('Error:', error);
-        showNotification('Failed to create workflow. Check console for details.', 'error');
+        showNotification('Failed to create workflow', 'error');
         submitBtn.disabled = false;
         submitBtn.textContent = '🚀 Submit Workflow';
     }
@@ -473,13 +468,11 @@ async function loadWorkflows() {
                 
                 if (allCompleted) {
                     if (autoRefreshInterval) {
-                        console.log('All workflows completed, stopping auto-refresh');
                         stopAutoRefresh();
                     }
                 } else {
                     // If not all completed, ensure auto-refresh is running
                     if (!autoRefreshInterval) {
-                        console.log('Workflows still running, starting auto-refresh');
                         startAutoRefresh();
                     }
                 }
@@ -488,7 +481,6 @@ async function loadWorkflows() {
             document.getElementById('workflowsList').innerHTML = '<div class="empty-state"><p>Error loading workflows</p></div>';
         }
     } catch (error) {
-        console.error('Error loading workflows:', error);
         document.getElementById('workflowsList').innerHTML = '<div class="empty-state"><p>Failed to load workflows</p></div>';
     }
 }
@@ -651,7 +643,6 @@ async function cancelJob(jobId) {
             showNotification(`Error: ${error.detail || 'Failed to cancel job'}`, 'error');
         }
     } catch (error) {
-        console.error('Error:', error);
         showNotification('Failed to cancel job', 'error');
     }
 }
@@ -678,7 +669,6 @@ async function viewJobResults(jobId) {
             showNotification(`Error: ${error.detail || 'Failed to load results'}`, 'error');
         }
     } catch (error) {
-        console.error('Error loading job results:', error);
         showNotification('Failed to load job results', 'error');
     }
 }
