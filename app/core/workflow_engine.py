@@ -41,7 +41,7 @@ class WorkflowEngine:
             )
         
         workflow.status = JobStatus.RUNNING
-        workflow.started_at = datetime.utcnow()
+        workflow.started_at = datetime.now()
         
         return workflow
     
@@ -65,6 +65,8 @@ class WorkflowEngine:
         tiles_total: Optional[int] = None
     ):
         """Update job progress and propagate to workflow"""
+        from datetime import datetime
+        
         # Find job in workflows
         workflow_id = None
         tenant_id = None
@@ -77,6 +79,13 @@ class WorkflowEngine:
                         job.tiles_processed = tiles_processed
                     if tiles_total is not None:
                         job.tiles_total = tiles_total
+                    
+                    # Track time for ETA calculation
+                    now = datetime.now()
+                    if job.first_progress_time is None and progress > 0:
+                        job.first_progress_time = now
+                    if progress > 0:
+                        job.last_progress_time = now
                     
                     workflow_id = workflow.workflow_id
                     tenant_id = workflow.tenant_id
@@ -124,7 +133,7 @@ class WorkflowEngine:
         
         if all_completed:
             workflow.status = JobStatus.SUCCEEDED
-            workflow.completed_at = datetime.utcnow()
+            workflow.completed_at = datetime.now()
             
             # Check if any job failed
             if any(job.status == JobStatus.FAILED for job in workflow.jobs):

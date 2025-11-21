@@ -3,11 +3,27 @@ Workflow management API endpoints
 """
 from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from typing import Optional
+from datetime import datetime
 
 from app.models.workflow import Workflow, WorkflowCreate, WorkflowResponse
 from app.models.job import JobCreate, Job
 from app.core.workflow_engine import WorkflowEngine
 from app.core.scheduler import BranchAwareScheduler
+
+
+def _calculate_elapsed_time(job: Job) -> Optional[float]:
+    """Calculate elapsed time in seconds"""
+    if job.first_progress_time:
+        return (datetime.now() - job.first_progress_time).total_seconds()
+    return None
+
+
+def _calculate_eta(job: Job) -> Optional[float]:
+    """Calculate estimated time remaining in seconds"""
+    if job.first_progress_time and job.progress > 0 and job.progress < 1.0:
+        elapsed = (datetime.now() - job.first_progress_time).total_seconds()
+        return (elapsed / job.progress) * (1.0 - job.progress)
+    return None
 
 
 router = APIRouter()
@@ -115,7 +131,9 @@ async def list_workflows(
                 "branch": j.branch,
                 "tiles_processed": j.tiles_processed,
                 "tiles_total": j.tiles_total,
-                "error_message": j.error_message
+                "error_message": j.error_message,
+                "elapsed_time_seconds": _calculate_elapsed_time(j),
+                "estimated_remaining_seconds": _calculate_eta(j)
             } for j in w.jobs]
         )
         for w in workflows
@@ -156,7 +174,9 @@ async def get_workflow(
             "branch": j.branch,
             "tiles_processed": j.tiles_processed,
             "tiles_total": j.tiles_total,
-            "error_message": j.error_message
+            "error_message": j.error_message,
+            "elapsed_time_seconds": _calculate_elapsed_time(j),
+            "estimated_remaining_seconds": _calculate_eta(j)
         } for j in workflow.jobs]
     )
 

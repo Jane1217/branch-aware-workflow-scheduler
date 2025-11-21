@@ -3,6 +3,7 @@ Job management API endpoints
 """
 from fastapi import APIRouter, Header, HTTPException, Depends, Request
 from typing import Optional
+from datetime import datetime
 
 from app.models.job import JobResponse
 from app.core.scheduler import BranchAwareScheduler
@@ -43,6 +44,19 @@ async def get_job(
     for workflow in workflows:
         for job in workflow.jobs:
             if job.job_id == job_id:
+                # Calculate ETA
+                elapsed_time_seconds = None
+                estimated_remaining_seconds = None
+                
+                if job.first_progress_time and job.progress > 0:
+                    now = datetime.now()
+                    elapsed = (now - job.first_progress_time).total_seconds()
+                    elapsed_time_seconds = elapsed
+                    
+                    # Calculate ETA: elapsed_time / progress * (1 - progress)
+                    if job.progress < 1.0:
+                        estimated_remaining_seconds = (elapsed / job.progress) * (1.0 - job.progress)
+                
                 return JobResponse(
                     job_id=job.job_id,
                     job_type=job.job_type,
@@ -55,7 +69,9 @@ async def get_job(
                     started_at=job.started_at,
                     completed_at=job.completed_at,
                     result_path=job.result_path,
-                    error_message=job.error_message
+                    error_message=job.error_message,
+                    elapsed_time_seconds=elapsed_time_seconds,
+                    estimated_remaining_seconds=estimated_remaining_seconds
                 )
     
     raise HTTPException(status_code=404, detail="Job not found")

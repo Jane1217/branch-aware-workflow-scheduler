@@ -32,13 +32,17 @@ class Settings(BaseSettings):
     UPLOAD_STORAGE_PATH: str = "./uploads"
     
     # InstanSeg Settings - Optimized for acceleration
-    TILE_SIZE: int = 2048  # Tile size in pixels (larger = fewer tiles, faster processing)
-    TILE_OVERLAP: int = 128  # Overlap between tiles to avoid seams (pixels)
-    BATCH_SIZE: int = 2  # Number of tiles processed in parallel (reduced for MPS memory limits)
+    # Note: These values balance performance with system responsiveness
+    # Adjust based on your system's CPU/GPU capabilities
+    TILE_SIZE: int = 1024  # Tile size in pixels (smaller = more tiles but faster per-tile)
+    TILE_OVERLAP: int = 64  # Overlap between tiles to avoid seams (pixels)
+    BATCH_SIZE: int = 2  # Number of tiles processed in parallel per batch (1 = sequential batches)
     WSI_LEVEL: int = 1  # WSI pyramid level (0=highest res, 1=faster with good quality, 2=fastest)
     
     # Concurrency Settings
-    TILE_PROCESSING_WORKERS: int = 4  # Process pool size (true multi-core parallelism, set to CPU core count)
+    # Reduced to 1 for better responsiveness on single-user systems
+    # Increase if you have powerful multi-core CPU and want maximum speed
+    TILE_PROCESSING_WORKERS: int = 1  # Process pool size (1 = sequential processing)
     
     # WebSocket Settings
     WS_HEARTBEAT_INTERVAL: int = 30

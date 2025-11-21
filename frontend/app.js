@@ -64,8 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
         startAutoRefresh();
     }
     
-    // Auto-connect WebSocket
-    connectWebSocket();
+    // Don't auto-connect WebSocket - user must click Connect button
 });
 
 function showTab(tabName) {
@@ -113,7 +112,7 @@ function startAutoRefresh() {
             stopAutoRefresh();
             startAutoRefresh(); // Restart with new interval
         }
-    }, 5000); // Check every 5 seconds
+    }, 8000); // Check every 8 seconds
 }
 
 function stopAutoRefresh() {
@@ -445,6 +444,16 @@ function displayWorkflows(workflows) {
         return;
     }
 
+    // Save current open/closed state of View Jobs sections before refreshing
+    const openSections = new Set();
+    workflows.forEach(workflow => {
+        const detailsId = `jobs-${workflow.workflow_id}`;
+        const details = document.getElementById(detailsId);
+        if (details && details.style.display !== 'none') {
+            openSections.add(workflow.workflow_id);
+        }
+    });
+
     workflowsList.innerHTML = workflows.map(workflow => {
         const statusClass = workflow.status.toLowerCase();
         const progressPercent = (workflow.progress * 100).toFixed(1);
@@ -482,14 +491,22 @@ function displayWorkflows(workflows) {
                 <div class="progress-bar">
                     <div class="progress-fill" style="width: ${progressPercent}%"></div>
                 </div>
-                <span class="progress-text">${progressPercent}%</span>
+                <div class="progress-info">
+                    <span class="progress-text">${progressPercent}%</span>
+                    ${workflow.jobs.length > 0 && workflow.jobs[0].elapsed_time_seconds !== null && workflow.jobs[0].elapsed_time_seconds !== undefined ? `
+                        <span class="progress-time">${formatDuration(workflow.jobs[0].elapsed_time_seconds)}</span>
+                    ` : ''}
+                    ${workflow.jobs.length > 0 && workflow.jobs[0].estimated_remaining_seconds !== null && workflow.jobs[0].estimated_remaining_seconds !== undefined ? `
+                        <span class="progress-eta">ETA: ${formatDuration(workflow.jobs[0].estimated_remaining_seconds)}</span>
+                    ` : ''}
+                </div>
             </div>
             
             <div class="workflow-jobs">
                 <button class="btn-toggle" onclick="toggleJobs(this, '${workflow.workflow_id}')">
-                    <span class="toggle-icon">▼</span> View Jobs (${workflow.jobs.length})
+                    <span class="toggle-icon">${openSections.has(workflow.workflow_id) ? '▲' : '▼'}</span> View Jobs (${workflow.jobs.length})
                 </button>
-                <div class="jobs-details" id="jobs-${workflow.workflow_id}" style="display: none;">
+                <div class="jobs-details" id="jobs-${workflow.workflow_id}" style="display: ${openSections.has(workflow.workflow_id) ? 'block' : 'none'};">
                     ${workflow.jobs.map(job => `
                         <div class="job-detail-item">
                             <div class="job-detail-header">
@@ -501,6 +518,12 @@ function displayWorkflows(workflows) {
                                 <div class="job-progress">
                                     <span>Progress: ${(job.progress * 100).toFixed(1)}%</span>
                                     ${job.tiles_total > 0 ? `<span class="tiles-info">Tiles: ${job.tiles_processed || 0} / ${job.tiles_total}</span>` : ''}
+                                    ${job.elapsed_time_seconds !== null && job.elapsed_time_seconds !== undefined ? `
+                                        <span class="time-info">Elapsed: ${formatDuration(job.elapsed_time_seconds)}</span>
+                                    ` : ''}
+                                    ${job.estimated_remaining_seconds !== null && job.estimated_remaining_seconds !== undefined ? `
+                                        <span class="eta-info">ETA: ${formatDuration(job.estimated_remaining_seconds)}</span>
+                                    ` : ''}
                                 </div>
                                 <div class="job-actions">
                                     ${job.status === 'SUCCEEDED' ? `
@@ -519,6 +542,18 @@ function displayWorkflows(workflows) {
         </div>
         `;
     }).join('');
+    
+    // Restore open/closed state after rendering
+    workflows.forEach(workflow => {
+        const detailsId = `jobs-${workflow.workflow_id}`;
+        const details = document.getElementById(detailsId);
+        const button = details?.previousElementSibling;
+        if (details && button && openSections.has(workflow.workflow_id)) {
+            details.style.display = 'block';
+            const icon = button.querySelector('.toggle-icon');
+            if (icon) icon.textContent = '▲';
+        }
+    });
 }
 
 function toggleJobs(button, workflowId) {
@@ -704,4 +739,19 @@ function formatTime(timestamp) {
     if (!timestamp) return 'N/A';
     const date = new Date(timestamp);
     return date.toLocaleString();
+}
+
+function formatDuration(seconds) {
+    if (seconds === null || seconds === undefined || isNaN(seconds)) return 'N/A';
+    if (seconds < 60) {
+        return `${Math.round(seconds)}s`;
+    } else if (seconds < 3600) {
+        const mins = Math.floor(seconds / 60);
+        const secs = Math.round(seconds % 60);
+        return `${mins}m ${secs}s`;
+    } else {
+        const hours = Math.floor(seconds / 3600);
+        const mins = Math.floor((seconds % 3600) / 60);
+        return `${hours}h ${mins}m`;
+    }
 }

@@ -186,12 +186,12 @@ class InstanSegService:
         # Each process loads its own WSI and model to avoid serialization issues
         import os
         cpu_count = os.cpu_count() or 4
-        tile_workers = min(
-            getattr(settings, 'TILE_PROCESSING_WORKERS', cpu_count),
-            cpu_count  # Don't exceed CPU core count
-        )
+        # Use configured value directly (don't override with cpu_count)
+        tile_workers = getattr(settings, 'TILE_PROCESSING_WORKERS', 1)
+        # Ensure it doesn't exceed CPU core count
+        tile_workers = min(tile_workers, cpu_count)
         self.tile_executor = ProcessPoolExecutor(max_workers=tile_workers)
-        print(f"Initialized ProcessPoolExecutor with {tile_workers} workers (CPU cores: {cpu_count})")
+        print(f"Initialized ProcessPoolExecutor with {tile_workers} workers (CPU cores: {cpu_count}, configured: {getattr(settings, 'TILE_PROCESSING_WORKERS', 1)})")
     
     async def segment_cells(
         self,

@@ -3,7 +3,7 @@ Job models and state management
 """
 from enum import Enum
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from pydantic import BaseModel, Field
 from uuid import UUID, uuid4
 
@@ -41,10 +41,14 @@ class Job(BaseModel):
     # Metadata
     metadata: Dict[str, Any] = Field(default_factory=dict)
     
-    # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    # Timestamps (using local time)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    
+    # Time tracking for ETA calculation
+    first_progress_time: Optional[datetime] = None  # When progress first started
+    last_progress_time: Optional[datetime] = None  # Last progress update time
     
     # Results
     result_path: Optional[str] = None
@@ -85,4 +89,7 @@ class JobResponse(BaseModel):
     completed_at: Optional[datetime]
     result_path: Optional[str]
     error_message: Optional[str]
+    # ETA fields (calculated on demand)
+    elapsed_time_seconds: Optional[float] = None
+    estimated_remaining_seconds: Optional[float] = None
 

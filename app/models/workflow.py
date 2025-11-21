@@ -21,7 +21,7 @@ class Workflow(BaseModel):
     progress: float = 0.0  # Overall workflow progress
     
     # Timestamps
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    created_at: datetime = Field(default_factory=lambda: datetime.now())
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     

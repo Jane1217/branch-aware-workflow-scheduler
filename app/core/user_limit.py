@@ -37,7 +37,7 @@ class UserLimitManager:
             if len(self.active_slots) < self.max_active_users:
                 self.active_slots[tenant_id] = ActiveUserSlot(
                     tenant_id=tenant_id,
-                    acquired_at=datetime.utcnow()
+                    acquired_at=datetime.now()
                 )
                 return True
             
@@ -62,7 +62,7 @@ class UserLimitManager:
                 next_tenant_id = self.waiting_queue.popleft()
                 self.active_slots[next_tenant_id] = ActiveUserSlot(
                     tenant_id=next_tenant_id,
-                    acquired_at=datetime.utcnow()
+                    acquired_at=datetime.now()
                 )
                 return next_tenant_id
             

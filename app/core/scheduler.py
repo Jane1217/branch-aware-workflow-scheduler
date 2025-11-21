@@ -150,7 +150,7 @@ class BranchAwareScheduler:
                 # Add to running jobs
                 self.running_jobs[job.job_id] = job
                 job.status = JobStatus.RUNNING
-                job.started_at = datetime.utcnow()
+                job.started_at = datetime.now()
                 
                 # Execute job in background
                 asyncio.create_task(self._execute_job(job))
@@ -178,7 +178,7 @@ class BranchAwareScheduler:
             job.error_message = str(e)
         finally:
             # Mark as completed
-            job.completed_at = datetime.utcnow()
+            job.completed_at = datetime.now()
             
             # Only set as SUCCEEDED if not already FAILED
             if job.status != JobStatus.FAILED:
