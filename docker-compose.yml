@@ -97,7 +97,6 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./grafana-dashboard.json:/etc/grafana/provisioning/dashboards/dashboard.json:ro
     depends_on:
       - prometheus
     restart: unless-stopped

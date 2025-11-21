@@ -335,102 +335,58 @@ To scale this system to handle 10× more jobs/users (e.g., from 100 to 1000 conc
 
 ## Testing and Monitoring in Production
 
-### Testing Strategy
+This section describes how to verify system functionality and monitor system health in a production environment.
 
-The system can be tested using the following approaches:
+### Testing in Production
 
-#### 1. Manual API Testing
+**API Testing**: Use the interactive Swagger UI at http://localhost:8000/docs to test endpoints directly.
 
-Use the interactive Swagger UI at http://localhost:8000/docs to test API endpoints directly. All endpoints are documented with request/response schemas.
-
-#### 2. Integration Testing
-
-Test complete workflow lifecycle:
-- Create workflows via `POST /api/workflows` with `X-User-ID` header
-- Monitor job progress via WebSocket (`/api/progress/ws`) or `GET /api/jobs/{job_id}`
+**Integration Testing**: Test complete workflow lifecycle:
+- Create workflows via `POST /api/workflows`
+- Monitor progress via WebSocket or `GET /api/jobs/{job_id}`
 - Retrieve results via `GET /api/jobs/{job_id}/results`
-- View visualization via `GET /api/visualization/{job_id}/visualization`
 
-#### 3. Load Testing
-
-Use tools like Locust, Apache Bench, or custom scripts to test system behavior under load. Monitor:
-- Requests per second (RPS)
-- Job throughput (jobs/second)
-- API response times (p50, p95, p99)
-- Resource utilization (CPU, memory, GPU)
+**Load Testing**: Use tools like Locust or Apache Bench to test under load. Monitor RPS, job throughput, response times (p50, p95, p99), and resource utilization.
 
 ### Monitoring in Production
 
-#### 1. Metrics Collection
+The system provides **two monitoring approaches**:
 
-The system exposes Prometheus metrics at `/metrics`:
+#### 1. Built-in Web Dashboard (Recommended for Quick Monitoring)
 
-**Key Metrics**:
-- `workflow_jobs_total`: Total number of jobs processed
-- `workflow_jobs_active`: Currently active jobs
-- `workflow_queue_depth`: Number of pending jobs per branch
-- `job_latency_seconds`: Job execution time (histogram)
-- `active_users`: Number of concurrent active users
+Access the **Monitoring** tab in the web UI (http://localhost:8000/) to view:
+- **Average Job Latency per minute**: Average total time for jobs completed in the last 60 seconds
+- **Active Workers**: Currently running jobs (global and per-tenant)
+- **Per-Branch Queue Depth**: Number of pending jobs per tenant and branch
+- **Active Users**: Current number of concurrent active users
 
-**Example Prometheus Query**:
-```promql
-# Average job latency per minute
-rate(job_latency_seconds_sum[1m]) / rate(job_latency_seconds_count[1m])
+This dashboard uses the `/api/metrics/dashboard` endpoint which provides real-time metrics directly from the scheduler state.
 
-# Per-branch queue depth
-workflow_queue_depth{tenant_id="user-1", branch="branch-1"}
-```
+#### 2. Prometheus + Grafana (Recommended for Production Monitoring)
 
-#### 2. Dashboard Visualization
+For advanced monitoring and alerting:
 
-Use Grafana to create dashboards:
+**Metrics Collection**: The system exposes Prometheus metrics at `/metrics` endpoint. Key metrics include:
+- `http_requests_total`, `http_request_duration_seconds`, `http_errors_total` (HTTP metrics)
+- `jobs_total`, `job_latency_seconds` (job metrics by type, status, tenant)
+- `queue_depth` (pending jobs per tenant and branch)
+- `worker_active_jobs` (running jobs per tenant)
+- `active_users` (concurrent active users)
 
-**Recommended Dashboards**:
-- **System Health**: Overall system status, error rates, active users
-- **Job Performance**: Job latency, throughput, success/failure rates
-- **Queue Monitoring**: Queue depth per branch, wait times
-- **Resource Utilization**: CPU, memory, GPU usage
+**Setup**:
+1. Prometheus automatically collects metrics from `/metrics` (configured in `prometheus.yml`)
+2. Access Prometheus UI at http://localhost:9090 to query metrics
+3. Access Grafana at http://localhost:3000 (username: `admin`, password: `admin`)
+4. In Grafana, add Prometheus as data source (URL: `http://prometheus:9090`)
+5. Create dashboards to visualize system health, job performance, and queue monitoring
 
-#### 3. Alerting
+**Alerting**: Set up alerts in Prometheus or Grafana for:
+- High queue depth (> 100 jobs)
+- High error rate (> 5%)
+- Slow jobs (latency > SLA threshold)
+- System overload (active users/jobs exceeding limits)
 
-Set up alerts for critical issues:
-
-**Recommended Alerts**:
-- **High Queue Depth**: Alert when queue depth exceeds threshold (e.g., > 100 jobs)
-- **High Error Rate**: Alert when error rate exceeds 5%
-- **Slow Jobs**: Alert when average job latency exceeds SLA (e.g., > 5 minutes)
-- **System Resource Exhaustion**: Alert when CPU/memory usage exceeds 80%
-
-#### 4. Logging
-
-Implement structured logging:
-
-**Log Levels**:
-- **INFO**: Workflow creation, job completion, normal operations
-- **WARNING**: Job failures, retries, resource constraints
-- **ERROR**: System errors, API failures, unexpected exceptions
-- **DEBUG**: Detailed execution traces (disabled in production)
-
-**Log Aggregation**:
-- Use ELK Stack (Elasticsearch, Logstash, Kibana) or similar
-- Include correlation IDs for tracing requests across services
-- Rotate logs regularly to manage disk space
-
-#### 5. Health Checks
-
-Monitor application health:
-
-```bash
-# Health check endpoint
-curl http://localhost:8000/health
-```
-
-**Health Check Components**:
-- Database connectivity (if using database)
-- Redis connectivity (if using Redis)
-- Worker pool status
-- Disk space availability
-- GPU availability (if using GPU)
+**Health Checks**: Monitor via `/health` endpoint. Check API server status, Redis connectivity, worker pool status, and resource availability.
 
 ## Exported Segmentation Results
 
