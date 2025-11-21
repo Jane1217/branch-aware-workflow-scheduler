@@ -135,6 +135,11 @@ class BranchAwareScheduler:
             # Get next job from branch queue
             job = queue[0]
             
+            # Check if user has active slot (CRITICAL: enforce 3-user limit)
+            has_slot = await self.user_limit_manager.is_active(job.tenant_id)
+            if not has_slot:
+                continue  # User doesn't have active slot, skip this job
+            
             # Check dependencies
             if not self._check_dependencies(job.job_id):
                 continue  # Dependencies not met, skip for now
@@ -156,12 +161,31 @@ class BranchAwareScheduler:
                 asyncio.create_task(self._execute_job(job))
     
     def _check_dependencies(self, job_id: str) -> bool:
-        """Check if all dependencies for a job are completed"""
+        """
+        Check if all dependencies for a job are completed.
+        
+        A dependency is considered satisfied only if:
+        1. The dependency job is in completed_jobs (SUCCEEDED or FAILED)
+        
+        If a dependency is still running or pending, the job must wait.
+        """
         if job_id not in self.job_dependencies:
             return True  # No dependencies
         
         deps = self.job_dependencies[job_id]
-        return all(dep_id in self.completed_jobs for dep_id in deps)
+        
+        # Check if all dependencies are completed
+        for dep_id in deps:
+            # If dependency is still running, job must wait
+            if dep_id in self.running_jobs:
+                return False  # Dependency is still running
+            
+            # If dependency is not completed, job must wait
+            if dep_id not in self.completed_jobs:
+                return False  # Dependency not completed
+        
+        # All dependencies are completed
+        return True
     
     async def _execute_job(self, job: Job):
         """Execute a job and handle completion"""
@@ -198,7 +222,12 @@ class BranchAwareScheduler:
                 tenant_jobs = self.tenant_manager.get_tenant_jobs(job.tenant_id)
                 tenant_workflows = self.tenant_manager.get_tenant_workflows(job.tenant_id)
                 if not tenant_jobs and not tenant_workflows:
-                    await self.user_limit_manager.release_slot(job.tenant_id)
+                    # Release slot and activate next user from queue
+                    next_tenant_id = await self.user_limit_manager.release_slot(job.tenant_id)
+                    if next_tenant_id:
+                        # Notify workflow engine that a new user got a slot
+                        # This will be handled by workflow engine checking slot status
+                        pass
     
     def get_queue_depth(self, branch: Optional[str] = None) -> int:
         """Get queue depth for a branch or total"""

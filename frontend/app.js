@@ -7,43 +7,43 @@ let autoRefreshInterval = null;
 // Available images (will be loaded from server)
 const AVAILABLE_IMAGES = [
     { 
-        name: 'CMU-1-Small-Region.svs', 
+        name: 'sample-001-small.svs', 
         path: 'Aperio SVS/CMU-1-Small-Region.svs', 
         description: '⚠️ Small region - May have few/no cells (2MB) - Good for quick testing',
         recommended: false
     },
     { 
-        name: 'CMU-1.svs', 
+        name: 'sample-001.svs', 
         path: 'Aperio SVS/CMU-1.svs', 
         description: '✅ RECOMMENDED: Full slide with good cell density (169MB) - Best for Cell Segmentation',
         recommended: true
     },
     { 
-        name: 'CMU-2.svs', 
+        name: 'sample-002.svs', 
         path: 'Aperio SVS/CMU-2.svs', 
         description: '✅ RECOMMENDED: Large full slide (373MB) - Excellent for Cell Segmentation',
         recommended: true
     },
     { 
-        name: 'CMU-3.svs', 
+        name: 'sample-003.svs', 
         path: 'Aperio SVS/CMU-3.svs', 
         description: '✅ RECOMMENDED: Medium full slide (242MB) - Good for Cell Segmentation',
         recommended: true
     },
     { 
-        name: 'CMU-1-JP2K-33005.svs', 
+        name: 'sample-004-jp2k.svs', 
         path: 'Aperio SVS/CMU-1-JP2K-33005.svs', 
         description: 'Full slide JPEG2000 format (126MB) - Good for Cell Segmentation',
         recommended: true
     },
     { 
-        name: 'JP2K-33003-1.svs', 
+        name: 'sample-005-jp2k.svs', 
         path: 'Aperio SVS/JP2K-33003-1.svs', 
         description: 'JPEG2000 format (63MB) - Medium size',
         recommended: false
     },
     { 
-        name: 'JP2K-33003-2.svs', 
+        name: 'sample-006-jp2k.svs', 
         path: 'Aperio SVS/JP2K-33003-2.svs', 
         description: 'JPEG2000 format (289MB) - Large size',
         recommended: false
@@ -52,7 +52,25 @@ const AVAILABLE_IMAGES = [
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('workflowForm').addEventListener('submit', handleSubmitWorkflow);
+    // Set custom validation messages in English
+    const workflowForm = document.getElementById('workflowForm');
+    const workflowNameInput = document.getElementById('workflowName');
+    
+    if (workflowNameInput) {
+        workflowNameInput.addEventListener('invalid', (e) => {
+            if (e.target.validity.valueMissing) {
+                e.target.setCustomValidity('Workflow name is required');
+            } else {
+                e.target.setCustomValidity('');
+            }
+        });
+        
+        workflowNameInput.addEventListener('input', (e) => {
+            e.target.setCustomValidity('');
+        });
+    }
+    
+    workflowForm.addEventListener('submit', handleSubmitWorkflow);
     document.getElementById('autoRefresh').addEventListener('change', toggleAutoRefresh);
     
     // Load initial data
@@ -99,11 +117,19 @@ function startAutoRefresh() {
         ? 3000  // 3 seconds when WebSocket is active (WebSocket handles real-time updates)
         : 2000;  // 2 seconds when WebSocket is disconnected (fallback polling)
     
-    autoRefreshInterval = setInterval(() => {
+    autoRefreshInterval = setInterval(async () => {
         if (document.getElementById('workflowsTab').classList.contains('active')) {
-            loadWorkflows();
+            await loadWorkflows(); // loadWorkflows now checks if all workflows are completed and stops auto-refresh
         }
     }, refreshInterval);
+    
+    // Also check immediately if workflows are already completed
+    // This handles the case where user opens the page after workflows are done
+    setTimeout(async () => {
+        if (document.getElementById('workflowsTab').classList.contains('active')) {
+            await loadWorkflows();
+        }
+    }, 100);
     
     // Re-adjust interval if WebSocket connection status changes
     const checkInterval = setInterval(() => {
@@ -217,7 +243,7 @@ function addJob() {
                     Job Type <span class="required">*</span>
                     <span class="help-icon" title="Cell Segmentation: Detects cells. Tissue Mask: Creates tissue region mask">ℹ️</span>
                 </label>
-                <select name="job_type_${jobIndex}" required>
+                <select name="job_type_${jobIndex}" required oninvalid="this.setCustomValidity('Job type is required')" oninput="this.setCustomValidity('')">
                     <option value="">-- Select Type --</option>
                     <option value="cell_segmentation">Cell Segmentation</option>
                     <option value="tissue_mask">Tissue Mask</option>
@@ -230,7 +256,7 @@ function addJob() {
                 Image File <span class="required">*</span>
                 <span class="help-icon" title="Select an image file to process">ℹ️</span>
             </label>
-            <select name="image_path_${jobIndex}" class="image-selector" required>
+            <select name="image_path_${jobIndex}" class="image-selector" required oninvalid="this.setCustomValidity('Please select an image file')" oninput="this.setCustomValidity('')">
                 <option value="">-- Select Image --</option>
                 ${AVAILABLE_IMAGES.map(img => 
                     `<option value="${img.path}" ${img.recommended ? 'data-recommended="true"' : ''}>${img.name} - ${img.description}</option>`
@@ -245,7 +271,7 @@ function addJob() {
                     Branch <span class="required">*</span>
                     <span class="help-icon" title="Jobs in same branch run sequentially. Different branches run in parallel.">ℹ️</span>
                 </label>
-                <input type="text" name="branch_${jobIndex}" placeholder="e.g., branch-1" required>
+                <input type="text" name="branch_${jobIndex}" placeholder="e.g., branch-1" required oninvalid="this.setCustomValidity('Branch is required')" oninput="this.setCustomValidity('')">
             </div>
             
             <div class="form-group">
@@ -422,6 +448,17 @@ async function loadWorkflows() {
         if (response.ok) {
             const workflows = await response.json();
             displayWorkflows(workflows);
+            
+            // Check if all workflows are completed (SUCCEEDED or FAILED)
+            // If all are completed, stop auto-refresh to avoid unnecessary GET requests
+            const allCompleted = workflows.length > 0 && workflows.every(w => {
+                const status = String(w.status).toUpperCase();
+                return status === 'SUCCEEDED' || status === 'FAILED';
+            });
+            
+            if (allCompleted && autoRefreshInterval) {
+                stopAutoRefresh();
+            }
         } else {
             document.getElementById('workflowsList').innerHTML = '<div class="empty-state"><p>Error loading workflows</p></div>';
         }
@@ -491,15 +528,7 @@ function displayWorkflows(workflows) {
                 <div class="progress-bar">
                     <div class="progress-fill" style="width: ${progressPercent}%"></div>
                 </div>
-                <div class="progress-info">
-                    <span class="progress-text">${progressPercent}%</span>
-                    ${workflow.jobs.length > 0 && workflow.jobs[0].elapsed_time_seconds !== null && workflow.jobs[0].elapsed_time_seconds !== undefined ? `
-                        <span class="progress-time">${formatDuration(workflow.jobs[0].elapsed_time_seconds)}</span>
-                    ` : ''}
-                    ${workflow.jobs.length > 0 && workflow.jobs[0].estimated_remaining_seconds !== null && workflow.jobs[0].estimated_remaining_seconds !== undefined ? `
-                        <span class="progress-eta">ETA: ${formatDuration(workflow.jobs[0].estimated_remaining_seconds)}</span>
-                    ` : ''}
-                </div>
+                <span class="progress-text">${progressPercent}%</span>
             </div>
             
             <div class="workflow-jobs">
@@ -517,13 +546,7 @@ function displayWorkflows(workflows) {
                             <div class="job-detail-info">
                                 <div class="job-progress">
                                     <span>Progress: ${(job.progress * 100).toFixed(1)}%</span>
-                                    ${job.tiles_total > 0 ? `<span class="tiles-info">Tiles: ${job.tiles_processed || 0} / ${job.tiles_total}</span>` : ''}
-                                    ${job.elapsed_time_seconds !== null && job.elapsed_time_seconds !== undefined ? `
-                                        <span class="time-info">Elapsed: ${formatDuration(job.elapsed_time_seconds)}</span>
-                                    ` : ''}
-                                    ${job.estimated_remaining_seconds !== null && job.estimated_remaining_seconds !== undefined ? `
-                                        <span class="eta-info">ETA: ${formatDuration(job.estimated_remaining_seconds)}</span>
-                                    ` : ''}
+                                    ${job.image_path ? `<span class="image-info">Image: ${escapeHtml(job.image_path.split('/').pop())}</span>` : ''}
                                 </div>
                                 <div class="job-actions">
                                     ${job.status === 'SUCCEEDED' ? `

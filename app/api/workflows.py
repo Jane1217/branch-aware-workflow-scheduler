@@ -132,6 +132,7 @@ async def list_workflows(
                 "tiles_processed": j.tiles_processed,
                 "tiles_total": j.tiles_total,
                 "error_message": j.error_message,
+                "image_path": j.image_path,
                 "elapsed_time_seconds": _calculate_elapsed_time(j),
                 "estimated_remaining_seconds": _calculate_eta(j)
             } for j in w.jobs]

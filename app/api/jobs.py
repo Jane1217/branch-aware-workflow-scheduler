@@ -100,7 +100,7 @@ async def get_job_results(
                 # Load results from storage
                 from app.services.storage import StorageService
                 storage = StorageService()
-                results = await storage.load_results(job_id)
+                results = await storage.load_results(job_id, job.job_type.value)
                 
                 if results is None:
                     raise HTTPException(

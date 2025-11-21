@@ -33,6 +33,12 @@ class WorkflowEngine:
         self.workflows[workflow.workflow_id] = workflow
         workflow.status = JobStatus.PENDING
         
+        # Check if user has active slot
+        from app.core.user_limit import UserLimitManager
+        # Get user_limit_manager from scheduler
+        user_limit_manager = self.scheduler.user_limit_manager
+        has_slot = await user_limit_manager.is_active(workflow.tenant_id)
+        
         # Submit all jobs to scheduler
         for job in workflow.jobs:
             await self.scheduler.submit_job(
@@ -40,8 +46,14 @@ class WorkflowEngine:
                 execute_callback=self._create_job_executor(job)
             )
         
-        workflow.status = JobStatus.RUNNING
-        workflow.started_at = datetime.now()
+        # Only set workflow to RUNNING if user has active slot
+        # Otherwise, keep it PENDING until user gets a slot
+        if has_slot:
+            workflow.status = JobStatus.RUNNING
+            workflow.started_at = datetime.now()
+        else:
+            # User is queued, workflow stays PENDING
+            workflow.status = JobStatus.PENDING
         
         return workflow
     
@@ -80,12 +92,13 @@ class WorkflowEngine:
                     if tiles_total is not None:
                         job.tiles_total = tiles_total
                     
-                    # Track time for ETA calculation
-                    now = datetime.now()
-                    if job.first_progress_time is None and progress > 0:
-                        job.first_progress_time = now
-                    if progress > 0:
-                        job.last_progress_time = now
+                    # Track time for ETA calculation (only if job is not completed)
+                    if job.status not in [JobStatus.SUCCEEDED, JobStatus.FAILED]:
+                        now = datetime.now()
+                        if job.first_progress_time is None and progress > 0:
+                            job.first_progress_time = now
+                        if progress > 0:
+                            job.last_progress_time = now
                     
                     workflow_id = workflow.workflow_id
                     tenant_id = workflow.tenant_id
@@ -121,6 +134,16 @@ class WorkflowEngine:
         if not workflow.jobs:
             return
         
+        # Check if workflow should transition from PENDING to RUNNING
+        # (when user gets an active slot)
+        if workflow.status == JobStatus.PENDING:
+            user_limit_manager = self.scheduler.user_limit_manager
+            has_slot = await user_limit_manager.is_active(workflow.tenant_id)
+            if has_slot:
+                workflow.status = JobStatus.RUNNING
+                if not workflow.started_at:
+                    workflow.started_at = datetime.now()
+        
         # Calculate progress as average of all jobs
         total_progress = sum(job.progress for job in workflow.jobs)
         workflow.progress = total_progress / len(workflow.jobs)
@@ -131,13 +154,13 @@ class WorkflowEngine:
             for job in workflow.jobs
         )
         
-        if all_completed:
-            workflow.status = JobStatus.SUCCEEDED
-            workflow.completed_at = datetime.now()
-            
+        if all_completed and workflow.status != JobStatus.SUCCEEDED and workflow.status != JobStatus.FAILED:
             # Check if any job failed
             if any(job.status == JobStatus.FAILED for job in workflow.jobs):
                 workflow.status = JobStatus.FAILED
+            else:
+                workflow.status = JobStatus.SUCCEEDED
+            workflow.completed_at = datetime.now()
     
     def get_workflow(self, workflow_id: str) -> Optional[Workflow]:
         """Get a workflow by ID"""

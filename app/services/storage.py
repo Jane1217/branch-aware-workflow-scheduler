@@ -59,12 +59,21 @@ class StorageService:
         
         return str(output_file)
     
-    async def load_results(self, job_id: str) -> Optional[Dict[str, Any]]:
+    async def load_results(self, job_id: str, job_type: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """Load job results"""
+        # Try segmentation results first
         result_file = self.result_path / f"{job_id}_segmentation.json"
         if result_file.exists():
             async with aiofiles.open(result_file, "r") as f:
                 content = await f.read()
                 return json.loads(content)
+        
+        # Try tissue mask results
+        result_file = self.result_path / f"{job_id}_tissue_mask.json"
+        if result_file.exists():
+            async with aiofiles.open(result_file, "r") as f:
+                content = await f.read()
+                return json.loads(content)
+        
         return None
 
